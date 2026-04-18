@@ -1,0 +1,13 @@
+{
+  "name": "mirrorly-monorepo",
+  "private": true,
+  "description": "Mirrorly monorepo root — Railway deploys the backend from here",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "cd backend && npm start",
+    "install-backend": "cd backend && npm install --omit=dev",
+    "postinstall": "cd backend && npm install --omit=dev"
+  }
+}
