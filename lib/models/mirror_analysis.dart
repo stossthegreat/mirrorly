@@ -29,19 +29,22 @@ class Fix {
 class Report {
   final String strongest;
   final String pulldown;
+  final String boneReading;   // human translation of measured geometry
   final List<Fix> fixes;
   final String verdict;
 
   const Report({
     required this.strongest,
     required this.pulldown,
+    required this.boneReading,
     required this.fixes,
     required this.verdict,
   });
 
   factory Report.fromJson(Map<String, dynamic> j) => Report(
-    strongest: j['strongest'] as String? ?? '',
-    pulldown:  j['pulldown']  as String? ?? '',
+    strongest:   j['strongest']   as String? ?? '',
+    pulldown:    j['pulldown']    as String? ?? '',
+    boneReading: j['boneReading'] as String? ?? '',
     fixes: ((j['fixes'] as List?) ?? [])
         .map((e) => Fix.fromJson(e as Map<String, dynamic>))
         .toList(),

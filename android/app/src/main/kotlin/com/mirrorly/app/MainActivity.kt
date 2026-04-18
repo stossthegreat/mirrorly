@@ -1,4 +1,4 @@
-package com.example.aura2
+package com.mirrorly.app
 
 import io.flutter.embedding.android.FlutterActivity
 

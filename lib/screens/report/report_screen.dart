@@ -150,6 +150,16 @@ class _ReportScreenState extends State<ReportScreen> {
 
           const SizedBox(height: Sp.xl),
 
+          // Bone reading — the human translation of measured geometry
+          if (a.report.boneReading.isNotEmpty) ...[
+            _Block(
+              label: 'YOUR BONE STRUCTURE',
+              color: AppColors.measure,
+              body: a.report.boneReading,
+            ).animate().fadeIn(delay: 400.ms),
+            const SizedBox(height: Sp.md),
+          ],
+
           // Strongest trait
           _Block(
             label: 'ALREADY WORKING',
