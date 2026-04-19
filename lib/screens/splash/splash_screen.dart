@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../services/local_store_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 
@@ -16,9 +17,16 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 2800), () {
-      if (mounted) context.go('/scan');
-    });
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    // Minimum splash duration so the brand moment registers.
+    final onboarded = await LocalStoreService.isOnboarded();
+    await Future.delayed(const Duration(milliseconds: 2400));
+    if (!mounted) return;
+    // First-run → paywall. Returning users → home hub.
+    context.go(onboarded ? '/home' : '/paywall');
   }
 
   @override

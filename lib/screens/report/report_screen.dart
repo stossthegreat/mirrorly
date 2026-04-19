@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/face_geometry.dart';
 import '../../models/mirror_analysis.dart';
+import '../../models/scan_record.dart';
 import '../../services/archetype_service.dart';
+import '../../services/local_store_service.dart';
 import '../../services/mirror_api_service.dart';
 import '../../services/scoring_service.dart';
 import '../../theme/app_colors.dart';
@@ -62,8 +64,39 @@ class _ReportScreenState extends State<ReportScreen> {
         geometry:   widget.geometry,
       );
       if (mounted) setState(() => _analysis = result);
+      // Persist the scan so it lights up Progress + Advisor tabs.
+      await _persistScan(result);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _persistScan(MirrorAnalysis a) async {
+    final score = ScoringService.compute(widget.geometry);
+    final match = ArchetypeService.bestMatch(widget.geometry);
+    final record = ScanRecord(
+      id:                 'scan-${DateTime.now().millisecondsSinceEpoch}',
+      takenAt:            DateTime.now(),
+      geometry:           widget.geometry,
+      score:              score.value,
+      tierLabel:          score.tierLabel,
+      archetypeName:      match.archetype.name,
+      archetypeMatchPct:  (match.match * 100).round(),
+      capturedImagePath:  null,
+      maximizedImageUrl:  a.maximizedImageUrl,
+    );
+    await LocalStoreService.saveScan(record);
+
+    // Also save the Flux twin into the Generation Vault so it shows up in the
+    // gallery on the Progress tab.
+    if (a.maximizedImageUrl.isNotEmpty) {
+      await LocalStoreService.saveGeneration(GenerationRecord(
+        id:            'gen-${DateTime.now().millisecondsSinceEpoch}',
+        createdAt:     DateTime.now(),
+        prompt:        'Maximized twin · ${match.archetype.name}',
+        imageUrl:      a.maximizedImageUrl,
+        relatedScanId: record.id,
+      ));
     }
   }
 
@@ -99,8 +132,8 @@ class _ReportScreenState extends State<ReportScreen> {
               ),
               const SizedBox(height: 8),
               TextButton(
-                onPressed: () => context.go('/scan'),
-                child: const Text('New scan'),
+                onPressed: () => context.go('/home'),
+                child: const Text('Back to home'),
               ),
             ],
           ),
@@ -245,8 +278,8 @@ class _ReportScreenState extends State<ReportScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(Rd.lg)),
                     ),
-                    onPressed: () => context.go('/scan'),
-                    child: const Text('Re-scan'),
+                    onPressed: () => context.go('/home'),
+                    child: const Text('Done'),
                   ),
                 ),
               ),

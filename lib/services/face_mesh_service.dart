@@ -8,7 +8,11 @@ class FaceMesh {
 
   const FaceMesh(this.points);
 
-  bool get isValid => points.length >= 50;
+  // Lowered from 50 so bounding-box / landmark fallbacks still render
+  // something rather than being silently discarded. Layer-specific guards
+  // inside the painter (`< 200`, `< 400`) enforce higher thresholds where
+  // topology-specific indices matter (bone lines, triangle wash).
+  bool get isValid => points.length >= 4;
 
   /// Known MediaPipe face mesh indices for key anchors.
   /// https://developers.google.com/mediapipe/solutions/vision/face_landmarker

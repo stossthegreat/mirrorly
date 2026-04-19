@@ -115,11 +115,19 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
       _meshService = FaceMeshService();
     }
 
+    // Canonical Flutter + ML Kit setup — per google_mlkit_commons README:
+    //   Android → NV21 (natively delivered by camera 0.10.5+, no conversion)
+    //   iOS     → BGRA8888 (bytes accepted directly by ML Kit)
+    // Manual YUV420→NV21 conversion has stride bugs on high-res Pixel/Samsung
+    // modes (uvRow > w/2 * uvPx) which silently produces garbage and makes
+    // the detector return zero faces. Don't roll your own.
     _camera = CameraController(
       front,
       ResolutionPreset.high,
       enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.yuv420,
+      imageFormatGroup: Platform.isAndroid
+          ? ImageFormatGroup.nv21
+          : ImageFormatGroup.bgra8888,
     );
 
     try {
@@ -132,104 +140,64 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     }
   }
 
-  // Input image conversion — identical approach to fitnessos-repo which is
-  // running this exact pipeline on thousands of devices without issues.
+  // Canonical single-plane InputImage — per google_ml_kit_flutter sample
+  // (packages/example/lib/vision_detector_views/camera_view.dart). With the
+  // camera plugin configured to deliver NV21 on Android and BGRA on iOS, we
+  // just forward the first plane to ML Kit verbatim. No conversion, no stride
+  // handling, no manual byte shuffling.
   InputImage? _buildInputImage(CameraImage image) {
     final camera = _camera;
     if (camera == null) return null;
+    if (image.planes.isEmpty) return null;
 
     final rotation = Platform.isIOS
-        ? InputImageRotation.rotation0deg
+        ? (InputImageRotationValue.fromRawValue(camera.description.sensorOrientation)
+              ?? InputImageRotation.rotation0deg)
         : (InputImageRotationValue.fromRawValue(camera.description.sensorOrientation)
               ?? InputImageRotation.rotation270deg);
 
-    final size = Size(image.width.toDouble(), image.height.toDouble());
-
-    if (Platform.isAndroid) {
-      return _yuv420ToNv21InputImage(image, size, rotation);
-    } else {
-      return _bgraInputImage(image, size, rotation);
-    }
-  }
-
-  InputImage? _yuv420ToNv21InputImage(
-      CameraImage image, Size size, InputImageRotation rotation) {
-    try {
-      final w = image.width;
-      final h = image.height;
-      final yRow  = image.planes[0].bytesPerRow;
-      final uvRow = image.planes[1].bytesPerRow;
-      final uvPx  = image.planes[1].bytesPerPixel ?? 1;
-
-      final yLen  = w * h;
-      final uvLen = w * h ~/ 2;
-      final nv21  = Uint8List(yLen + uvLen);
-
-      final y = image.planes[0].bytes;
-      var idx = 0;
-      for (var row = 0; row < h; row++) {
-        for (var col = 0; col < w; col++) {
-          nv21[idx++] = y[row * yRow + col];
-        }
-      }
-
-      final u = image.planes[1].bytes;
-      final v = image.planes[2].bytes;
-      idx = yLen;
-      for (var row = 0; row < h ~/ 2; row++) {
-        for (var col = 0; col < w ~/ 2; col++) {
-          final off = row * uvRow + col * uvPx;
-          nv21[idx++] = v[off]; // V first for NV21
-          nv21[idx++] = u[off];
-        }
-      }
-
-      return InputImage.fromBytes(
-        bytes: nv21,
-        metadata: InputImageMetadata(
-          size: size,
-          rotation: rotation,
-          format: InputImageFormat.nv21,
-          bytesPerRow: w,
-        ),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  InputImage _bgraInputImage(
-      CameraImage image, Size size, InputImageRotation rotation) {
+    final plane = image.planes.first;
     return InputImage.fromBytes(
-      bytes: image.planes[0].bytes,
+      bytes: plane.bytes,
       metadata: InputImageMetadata(
-        size: size,
+        size: Size(image.width.toDouble(), image.height.toDouble()),
         rotation: rotation,
-        format: InputImageFormat.bgra8888,
-        bytesPerRow: image.planes[0].bytesPerRow,
+        format: Platform.isAndroid
+            ? InputImageFormat.nv21
+            : InputImageFormat.bgra8888,
+        bytesPerRow: plane.bytesPerRow,
       ),
     );
   }
 
-  // ML Kit returns landmark points in the *buffer* coordinate system (the raw,
-  // un-rotated camera frame). Our preview is rotated to upright + mirrored for
-  // the front cam, so we apply the matching rotation + mirror to every point
-  // before painting, otherwise the mesh lands off the face (or off-screen).
-  Offset _normalize(double bx, double by, double bufW, double bufH) {
-    double rx, ry, rw, rh;
+  // Canonical coordinate translator — ported from the official Flutter ML Kit
+  // sample (coordinates_translator.dart). Critical finding: ML Kit returns
+  // points in the **rotated (upright) frame**, not the raw buffer. For a 90°
+  // rotation, the upright image has dims (H, W) swapped, so we divide x by
+  // imageH on Android but by imageW on iOS (because the iOS Flutter plugin
+  // ignores the rotation metadata natively). The 270° case also implicitly
+  // mirrors — that's why front-cam in portrait (typical 270°) doesn't need an
+  // extra flip. 0°/180° is the only case where we mirror explicitly for front.
+  //
+  // Returns normalized 0..1 display-space coordinates for the portrait preview.
+  Offset _normalize(double bx, double by, double imgW, double imgH) {
+    final isIOS = Platform.isIOS;
+    double nx, ny;
     switch (_rotation) {
       case InputImageRotation.rotation90deg:
-        rx = bufH - by; ry = bx;          rw = bufH; rh = bufW; break;
-      case InputImageRotation.rotation180deg:
-        rx = bufW - bx; ry = bufH - by;   rw = bufW; rh = bufH; break;
+        nx = bx / (isIOS ? imgW : imgH);
+        ny = by / (isIOS ? imgH : imgW);
+        break;
       case InputImageRotation.rotation270deg:
-        rx = by;        ry = bufW - bx;   rw = bufH; rh = bufW; break;
+        nx = 1.0 - bx / (isIOS ? imgW : imgH);
+        ny = by / (isIOS ? imgH : imgW);
+        break;
       case InputImageRotation.rotation0deg:
-        rx = bx;        ry = by;          rw = bufW; rh = bufH; break;
+      case InputImageRotation.rotation180deg:
+        nx = _isFrontCam ? 1.0 - bx / imgW : bx / imgW;
+        ny = by / imgH;
+        break;
     }
-    var nx = rx / rw;
-    final ny = ry / rh;
-    if (_isFrontCam) nx = 1.0 - nx;
     return Offset(nx, ny);
   }
 
@@ -287,9 +255,13 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
 
       final face = faces.first;
 
-      // Fallback: if MediaPipe face-mesh didn't fire (older iPhone, unsupported
-      // device), synthesize a point cloud from ML Kit face contours. Fewer
-      // points but still renders a visible landmark overlay.
+      // LAYERED FALLBACK — try in order, take the first that yields enough
+      // points. This guarantees we advance past SEARCHING the moment a face
+      // is on screen, regardless of which ML Kit surface fires on the device.
+      //   1. MediaPipe face mesh (Android only, 468 pts)
+      //   2. Face contours (iOS + older Android, up to ~130 pts)
+      //   3. Face landmarks (eyes, nose, mouth — ~8 pts, always available)
+      //   4. BoundingBox sampled corners + center (always works, 9 pts)
       if (mesh == null || !mesh.isValid) {
         final pts = <Offset>[];
         for (final contour in face.contours.values) {
@@ -306,9 +278,40 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
       }
 
       if (mesh == null || !mesh.isValid) {
-        // Still nothing — skip this frame, wait for the next detection.
-        return;
+        // Layer 3 — landmarks
+        final pts = <Offset>[];
+        for (final lm in face.landmarks.values) {
+          if (lm == null) continue;
+          pts.add(_normalize(
+            lm.position.x.toDouble(), lm.position.y.toDouble(), imgW, imgH));
+        }
+        // Layer 4 — bounding box corners + mid-edges + center
+        final bb = face.boundingBox;
+        final bboxPts = [
+          Offset(bb.left,              bb.top),
+          Offset(bb.right,             bb.top),
+          Offset(bb.right,             bb.bottom),
+          Offset(bb.left,              bb.bottom),
+          Offset((bb.left + bb.right) / 2, bb.top),
+          Offset(bb.right,             (bb.top + bb.bottom) / 2),
+          Offset((bb.left + bb.right) / 2, bb.bottom),
+          Offset(bb.left,              (bb.top + bb.bottom) / 2),
+          Offset((bb.left + bb.right) / 2, (bb.top + bb.bottom) / 2),
+        ];
+        for (final p in bboxPts) {
+          pts.add(_normalize(p.dx, p.dy, imgW, imgH));
+        }
+        if (pts.isNotEmpty) {
+          mesh = FaceMesh(pts);
+          _fallbackHit++;
+          _lastMeshPts = pts.length;
+        }
       }
+
+      // Even if mesh is STILL null somehow, advance phase — a face was seen.
+      // The painter checks for mesh validity before drawing mesh-dependent
+      // layers, so SEARCHING → SCANNING always transitions when a face lands.
+      mesh ??= FaceMesh(const []);
 
       _faceFrames++;
       final geom = FaceGeometryService.computeGeometry(face, imgW, imgH);
@@ -463,6 +466,67 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     return s.length > 40 ? s.substring(0, 40) : s;
   }
 
+  Widget _diagPanel() {
+    // Traffic light: green = mesh firing, amber = fallback only, red = no faces
+    final state = _meshHit > 0
+        ? ('GREEN', AppColors.signalGreen, 'MEDIAPIPE LIVE')
+        : (_fallbackHit > 0
+            ? ('AMBER', AppColors.signalAmber, 'FALLBACK (CONTOUR/LANDMARK/BBOX)')
+            : ('RED',   AppColors.signalRed,   _facesHit == 0
+                ? 'NO FACE DETECTED'
+                : 'FACE HIT, MESH FAILED'));
+    final plat = Platform.isAndroid ? 'ANDROID' : (Platform.isIOS ? 'iOS' : 'OTHER');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      constraints: const BoxConstraints(maxWidth: 280),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: state.$2.withValues(alpha: 0.6), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 7, height: 7,
+                margin: const EdgeInsets.only(right: 6),
+                decoration: BoxDecoration(
+                  color: state.$2, shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: state.$2.withValues(alpha: 0.6), blurRadius: 6)],
+                ),
+              ),
+              Text('${state.$1} · ${state.$3}',
+                style: TextStyle(color: state.$2, fontSize: 9,
+                  fontWeight: FontWeight.w800, letterSpacing: 1.4,
+                  fontFamilyFallback: const ['monospace'])),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text('$plat · PHASE ${_phase.name.toUpperCase()}',
+            style: const TextStyle(color: Colors.white70, fontSize: 8.5,
+              fontWeight: FontWeight.w700, letterSpacing: 1.4,
+              fontFamilyFallback: ['monospace'])),
+          const SizedBox(height: 3),
+          Text(
+            'FR $_framesTotal   FC $_facesHit   MS $_meshHit   FB $_fallbackHit   PTS $_lastMeshPts',
+            style: const TextStyle(color: Colors.white, fontSize: 9,
+              fontWeight: FontWeight.w600, letterSpacing: 0.6, height: 1.3,
+              fontFamilyFallback: ['monospace'])),
+          if (_pipelineErr.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(_pipelineErr,
+              style: TextStyle(color: AppColors.signalAmber, fontSize: 8.5,
+                fontWeight: FontWeight.w700, height: 1.3,
+                fontFamilyFallback: const ['monospace'])),
+          ],
+        ],
+      ),
+    );
+  }
+
   // Cover-fill camera: scale the CameraPreview's natural AspectRatio box
   // up until it fully covers the screen (parts of the preview are clipped on
   // the overflow side). The mesh overlay is passed as CameraPreview's `child`
@@ -609,41 +673,11 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
               ),
             ),
 
-          // Diagnostic badge — remove once the pipeline is stable on all
-          // target devices. Shows: frames processed · faces hit · mesh hit ·
-          // contour fallbacks · last point count · last error.
+          // Diagnostic panel — shows exactly what the detect pipeline is
+          // doing live. Remove once we trust the pipeline on target devices.
           Positioned(
-            left: 12, bottom: 14,
-            child: SafeArea(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: _meshHit > 0
-                        ? AppColors.signalGreen.withValues(alpha: 0.5)
-                        : (_fallbackHit > 0
-                            ? AppColors.signalAmber.withValues(alpha: 0.5)
-                            : AppColors.signalRed.withValues(alpha: 0.45)),
-                    width: 0.8,
-                  ),
-                ),
-                child: Text(
-                  'FR $_framesTotal · FC $_facesHit · '
-                  'MS $_meshHit · FB $_fallbackHit · PTS $_lastMeshPts'
-                  '${_pipelineErr.isNotEmpty ? '\n$_pipelineErr' : ''}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
-                    height: 1.4,
-                    fontFamilyFallback: ['monospace'],
-                  ),
-                ),
-              ),
-            ),
+            left: 10, bottom: 14,
+            child: SafeArea(child: _diagPanel()),
           ),
 
           // Top bar — editorial masthead
