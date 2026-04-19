@@ -2,14 +2,17 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../services/face_mesh_service.dart';
 
-/// Single-angle scan — spectacle over theatre. Five phases, ~8s total. The
-/// moat is visual density on ONE angle, not copying the multi-angle gimmick.
+/// Multi-angle Face-ID-style scan. Front, then left 3/4, then right 3/4 —
+/// each lock → measure → capture. The dramatic bone overlay fires on every
+/// angle. Users experience it as a thorough clinical capture, not a gimmick.
 enum ScanPhase {
-  searching,
-  scanning,
-  measuring,
-  capturing,
-  analysing,
+  searching,     // no face yet — generic or for next angle
+  scanning,      // mesh assembly
+  measuring,     // bone reveal + lock strike
+  rotateLeft,    // cue: "turn slowly LEFT"
+  rotateRight,   // cue: "turn slowly RIGHT"
+  capturing,     // final capture moment
+  analysing,     // send all 3 images + full geometry to backend
 }
 
 /// The scan-screen render stack, engineered to feel like an Iron-Man / Blade
@@ -100,6 +103,20 @@ class GeometryOverlayPainter extends CustomPainter {
             ? '◆ LOCK ACQUIRED  ·  EVERY MM MAPPED'
             : '◉ YOUR BONES, READ  ·  LOCKING YOUR ARCHETYPE');
         _drawBottomMeasurementStream(canvas, size);
+        break;
+
+      case ScanPhase.rotateLeft:
+      case ScanPhase.rotateRight:
+        if (mesh != null && mesh!.isValid) {
+          _drawMeshDots(canvas, size, alphaScale: 0.3);
+          _drawBoneStructure(canvas, size, dramatic: true);
+        }
+        _drawRotateCue(canvas, size,
+          leftwards: phase == ScanPhase.rotateLeft);
+        _drawTopTicker(canvas, size,
+          phase == ScanPhase.rotateLeft
+            ? '↺ TURN SLOWLY LEFT · PROFILE INCOMING'
+            : '↻ TURN SLOWLY RIGHT · CAPTURING LAST ANGLE');
         break;
 
       case ScanPhase.capturing:
@@ -557,24 +574,32 @@ class GeometryOverlayPainter extends CustomPainter {
       }
     }
 
-    // Mandible — defining bone. First, thickest, widest.
+    // Mandible — defining bone. Thickest line, first to reveal.
     chain(const [
       234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152,
       377, 400, 378, 379, 365, 397, 288, 361, 323, 454,
-    ], 0.00, 0.28, width: 2.8);
+    ], 0.00, 0.28, width: 3.4);
 
-    // Zygomatic L/R
-    chain(const [234, 227, 116, 123, 117, 118, 101], 0.20, 0.45, width: 2.0);
-    chain(const [454, 447, 345, 352, 346, 347, 330], 0.20, 0.45, width: 2.0);
+    // Zygomatic L/R (cheekbone shelf)
+    chain(const [234, 227, 116, 123, 117, 118, 101], 0.20, 0.45, width: 2.4);
+    chain(const [454, 447, 345, 352, 346, 347, 330], 0.20, 0.45, width: 2.4);
 
-    // Orbital frame L
+    // Orbital frame L (full eye-socket trace — this is what the user loved)
     chain(const [
       33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7, 33,
-    ], 0.35, 0.60, width: 1.6, alpha: 0.85);
+    ], 0.35, 0.60, width: 2.0, alpha: 1.0);
     // Orbital frame R
     chain(const [
       263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249, 263,
-    ], 0.35, 0.60, width: 1.6, alpha: 0.85);
+    ], 0.35, 0.60, width: 2.0, alpha: 1.0);
+
+    // Iris ring L / R — tight rings around the pupil that read as "it can
+    // see every part of your eye." Draws AFTER the orbital frame so it sits
+    // on top as the finishing touch.
+    chain(const [468, 469, 470, 471, 472, 468],
+        0.58, 0.72, width: 1.4, alpha: 0.95, color: _cCyanHi);
+    chain(const [473, 474, 475, 476, 477, 473],
+        0.58, 0.72, width: 1.4, alpha: 0.95, color: _cCyanHi);
 
     // Frontal bone sweep
     chain(const [70, 63, 105, 66, 107, 9, 336, 296, 334, 293, 300],
@@ -606,6 +631,93 @@ class GeometryOverlayPainter extends CustomPainter {
         }
       }
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Rotate cue (shown during rotateLeft / rotateRight phases)
+  // ═══════════════════════════════════════════════════════════════════════════
+  void _drawRotateCue(Canvas canvas, Size size, {required bool leftwards}) {
+    final cx = size.width / 2;
+    final cy = size.height * 0.55;
+
+    final pulse = (math.sin(animT * 2.8) + 1) / 2;
+    final scaleP = 1.0 + pulse * 0.15;
+    final translateX = math.sin(animT * 2.0) * 18 * (leftwards ? -1 : 1);
+
+    canvas.save();
+    canvas.translate(cx + translateX, cy);
+    canvas.scale(scaleP, scaleP);
+
+    // Curved arrow
+    const r = 74.0;
+    final dir = leftwards ? -1 : 1;
+    final arrowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0
+      ..strokeCap = StrokeCap.round
+      ..color = _cGoldHi.withValues(alpha: 0.88)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset.zero, radius: r),
+      leftwards ? math.pi * 1.2 : -math.pi * 0.2,
+      math.pi * 1.1 * dir.toDouble(),
+      false, arrowPaint,
+    );
+
+    // Arrowhead
+    final tipAngle = leftwards
+      ? math.pi * 1.2 + math.pi * 1.1 * -1
+      : -math.pi * 0.2 + math.pi * 1.1;
+    final tip = Offset(math.cos(tipAngle) * r, math.sin(tipAngle) * r);
+    final tangent = Offset(
+      -math.sin(tipAngle) * dir.toDouble(),
+      math.cos(tipAngle) * dir.toDouble());
+    final p1 = tip + tangent * 14 + Offset(-tangent.dy, tangent.dx) * 12;
+    final p2 = tip + tangent * 14 + Offset(tangent.dy, -tangent.dx) * 12;
+    final headPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0
+      ..strokeCap = StrokeCap.round
+      ..color = _cGoldHi;
+    canvas.drawLine(tip, p1, headPaint);
+    canvas.drawLine(tip, p2, headPaint);
+
+    // Center label
+    final tp = TextPainter(
+      text: TextSpan(
+        text: leftwards ? 'TURN LEFT' : 'TURN RIGHT',
+        style: TextStyle(
+          color: _cGoldHi,
+          fontSize: 15,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 4.5,
+          fontFamilyFallback: const ['monospace'],
+          shadows: [
+            Shadow(color: _cGold.withValues(alpha: 0.9), blurRadius: 10),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
+
+    canvas.restore();
+
+    // Sub-instruction
+    final sub = TextPainter(
+      text: const TextSpan(
+        text: 'hold — lock acquiring',
+        style: TextStyle(
+          color: Color(0xFFF7F7F9),
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          fontStyle: FontStyle.italic,
+          letterSpacing: 0.6,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    sub.paint(canvas, Offset(cx - sub.width / 2, cy + r + 48));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

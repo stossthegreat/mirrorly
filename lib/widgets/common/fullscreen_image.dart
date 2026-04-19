@@ -3,8 +3,11 @@ import 'package:flutter/services.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 
-/// Tap-to-open fullscreen image viewer with pinch-zoom. Supports both
-/// in-memory bytes (local scan) and network URL (Flux Kontext renders).
+/// Tap-to-open fullscreen image viewer with pinch-zoom. Fills the screen —
+/// the Image uses BoxFit.contain but is given tight parent constraints so it
+/// scales up to fill one axis. (Previous version centered inside the viewer,
+/// which with loose constraints collapsed the image to its native pixel size
+/// and rendered as a tiny thumbnail on a black screen.)
 class FullscreenImage extends StatelessWidget {
   final Uint8List? bytes;
   final String?    url;
@@ -34,14 +37,22 @@ class FullscreenImage extends StatelessWidget {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
+          // Fill with Image directly — InteractiveViewer passes its tight
+          // constraints to the Image, and BoxFit.contain scales up to fill.
           Positioned.fill(
             child: InteractiveViewer(
               minScale: 1.0,
               maxScale: 5.0,
-              child: Center(
+              panEnabled: true,
+              child: SizedBox.expand(
                 child: bytes != null
-                    ? Image.memory(bytes!, fit: BoxFit.contain)
-                    : Image.network(url!, fit: BoxFit.contain,
+                    ? Image.memory(bytes!,
+                        fit: BoxFit.contain,
+                        alignment: Alignment.center,
+                        gaplessPlayback: true)
+                    : Image.network(url!,
+                        fit: BoxFit.contain,
+                        alignment: Alignment.center,
                         loadingBuilder: (_, child, p) => p == null ? child
                           : const Center(child: CircularProgressIndicator(
                               color: AppColors.gold, strokeWidth: 2)),

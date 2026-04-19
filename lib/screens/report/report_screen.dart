@@ -26,11 +26,13 @@ import '../../widgets/report/verdict_card.dart';
 class ReportScreen extends StatefulWidget {
   final Uint8List imageBytes;
   final FaceGeometry geometry;
+  final List<Uint8List> extraImages;
 
   const ReportScreen({
     super.key,
     required this.imageBytes,
     required this.geometry,
+    this.extraImages = const [],
   });
 
   @override
@@ -68,8 +70,9 @@ class _ReportScreenState extends State<ReportScreen> {
   Future<void> _run() async {
     try {
       final result = await MirrorApiService.scan(
-        imageBytes: widget.imageBytes,
-        geometry:   widget.geometry,
+        imageBytes:  widget.imageBytes,
+        geometry:    widget.geometry,
+        extraImages: widget.extraImages,
       );
       if (mounted) setState(() => _analysis = result);
       // Persist the scan so it lights up Progress + Advisor tabs.

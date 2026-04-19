@@ -24,8 +24,9 @@ final appRouter = GoRouter(
       builder: (context, state) {
         final extra = state.extra as Map<String, dynamic>;
         return ReportScreen(
-          imageBytes: extra['imageBytes'] as Uint8List,
-          geometry:   extra['geometry']   as FaceGeometry,
+          imageBytes:  extra['imageBytes'] as Uint8List,
+          geometry:    extra['geometry']   as FaceGeometry,
+          extraImages: (extra['extraImages'] as List?)?.cast<Uint8List>() ?? const [],
         );
       },
     ),

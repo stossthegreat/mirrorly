@@ -26,7 +26,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
  * Never compliments. Every observation cites a specific number. Rules things
  * OUT as aggressively as it rules things IN.
  */
-export async function analyse({ imageBase64, geometry }) {
+export async function analyse({ imageBase64, extraImages = [], geometry }) {
   const g = geometry ?? {};
 
   // Full 16-measurement table with plain interpretations.
@@ -118,24 +118,31 @@ Three fixes, ordered by leverage (biggest impact first). Not severity.
 
 Output MUST be valid JSON. No markdown. No text outside the object.`;
 
-  const userPrompt = `Analyze this face. Output the JSON per spec above.
+  const angleLabels = ['FRONT', 'LEFT 3/4 PROFILE', 'RIGHT 3/4 PROFILE'];
+  const allImages = [imageBase64, ...extraImages];
 
-Keep it devastating. Cite every measurement. Never soften. Rule out what won't suit them.`;
+  const userPrompt = `Analyze this face. ${allImages.length} angle${allImages.length > 1 ? 's' : ''} provided${allImages.length > 1 ? ` (${angleLabels.slice(0, allImages.length).join(', ')})` : ''}. Output the JSON per spec above.
+
+Keep it devastating. Cite every measurement. Never soften. Rule out what won't suit them. Use ALL angles when reading profile-specific features (chin projection, jaw ramus, maxillary forwardness, nose profile).`;
+
+  // Multi-image content block — GPT-4o natively supports multiple images.
+  const content = [{ type: 'text', text: userPrompt }];
+  for (let i = 0; i < allImages.length; i++) {
+    content.push({
+      type: 'text',
+      text: `[${angleLabels[i] ?? 'IMAGE ' + (i + 1)}]`,
+    });
+    content.push({
+      type: 'image_url',
+      image_url: { url: `data:image/jpeg;base64,${allImages[i]}`, detail: 'high' },
+    });
+  }
 
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
       { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: userPrompt },
-          {
-            type: 'image_url',
-            image_url: { url: `data:image/jpeg;base64,${imageBase64}`, detail: 'high' },
-          },
-        ],
-      },
+      { role: 'user', content },
     ],
     response_format: { type: 'json_object' },
     temperature: 0.55,

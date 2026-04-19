@@ -38,16 +38,27 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
   FaceMesh?    _mesh;
   FaceGeometry? _geometry;
   double       _progress = 0.0;
-  int          _countdown = 3;
+  final int    _countdown = 3; // legacy — painter takes it, unused in multi-angle flow
   bool         _busy = false;
 
   Timer? _measureTimer;
   Timer? _countdownTimer;
 
   int _faceFrames = 0;
-  static const int _requiredFrames = 12;  // ~2s of face-lock at typical detect rate
+  // First angle needs a full lock (2s-ish). Side angles are faster (1s-ish)
+  // because we already have geometry — it's more about the capture beat.
+  static const int _requiredFrames      = 10;
+  static const int _sideRequiredFrames  = 5;
 
   bool _processing = false;
+
+  // ── Multi-angle capture state ────────────────────────────────────────────
+  // Angle 0 = front, 1 = left 3/4, 2 = right 3/4
+  int _angleIdx = 0;
+  final List<Uint8List> _capturedImages = [];
+  // Geometry captured on the FRONT pass — sides are visual only (Flux needs
+  // a single input image anyway, and front gives the richest mesh).
+  FaceGeometry? _primaryGeometry;
 
   // Diagnostic counters — visible on-screen so bugs in the detect pipeline
   // (empty meshes, rotation mismatches, unsupported devices) surface loud
@@ -244,9 +255,9 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
       if (!mounted) return;
 
       if (faces.isEmpty) {
-        // Only reset to SEARCHING from scanning-phase — once we're past
-        // measuring the user briefly loses face detection while rotating,
-        // and we don't want to nuke the scan.
+        // Only reset to SEARCHING from scanning-phase. Past that — measuring,
+        // rotate cues, side scanning — the user is legitimately moving and
+        // may briefly lose detection. We protect the existing state.
         if (_phase == ScanPhase.searching || _phase == ScanPhase.scanning) {
           _faceFrames = 0;
           if (_phase != ScanPhase.searching) {
@@ -333,9 +344,11 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
       }
 
       if (_phase == ScanPhase.scanning) {
-        final p = (_faceFrames / _requiredFrames).clamp(0.0, 1.0);
+        // Side angles need fewer frames to feel responsive
+        final threshold = _angleIdx == 0 ? _requiredFrames : _sideRequiredFrames;
+        final p = (_faceFrames / threshold).clamp(0.0, 1.0);
         setState(() => _progress = p);
-        if (_faceFrames >= _requiredFrames) {
+        if (_faceFrames >= threshold) {
           _startMeasuring();
         }
       }
@@ -368,14 +381,14 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     HapticFeedback.mediumImpact();
     bool lockFired = false;
     _measureTimer?.cancel();
+    // Side angles get a faster measure (~1.8s) vs front (~3s) — sides are
+    // visual only. Front is the data capture.
+    final increment = _angleIdx == 0 ? 0.013 : 0.022;
     _measureTimer = Timer.periodic(40.ms, (t) {
       if (!mounted) { t.cancel(); return; }
-      final np = _progress + 0.013;  // ~3s full reveal
+      final np = _progress + increment;
       setState(() => _progress = np.clamp(0.0, 1.0));
 
-      // LOCK STRIKE haptic — fires exactly when the painter's signature
-      // lock-strike visual begins. Gives the user a physical beat that
-      // syncs to the flash, ring, and "◆ LOCK ◆" label.
       if (!lockFired && np >= 0.90) {
         lockFired = true;
         HapticFeedback.heavyImpact();
@@ -383,72 +396,68 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
 
       if (np >= 1.0) {
         t.cancel();
-        _startCapture();
+        _snapCurrentAngle();
       }
     });
   }
 
-  void _startCapture() {
-    setState(() {
-      _phase     = ScanPhase.capturing;
-      _progress  = 1.0;
-      _countdown = 3;
-    });
-    HapticFeedback.mediumImpact();
-
-    _countdownTimer?.cancel();
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) async {
-      if (!mounted) { t.cancel(); return; }
-      if (_countdown > 1) {
-        HapticFeedback.lightImpact();
-        setState(() => _countdown--);
-      } else {
-        t.cancel();
-        HapticFeedback.heavyImpact();
-        await _captureAndShip();
-      }
-    });
-  }
-
-  Future<void> _captureAndShip() async {
+  /// Takes a silent picture of the current frame, stashes it, then either
+  /// prompts for the next rotation OR proceeds to capture → analyse.
+  Future<void> _snapCurrentAngle() async {
     if (_busy) return;
     _busy = true;
-    setState(() => _phase = ScanPhase.analysing);
 
     try {
+      // Stop stream briefly, take picture, restart stream.
       await _camera?.stopImageStream();
       final file = await _camera?.takePicture();
-      if (file == null) throw Exception('capture failed');
+      if (file == null) throw Exception('capture failed at angle $_angleIdx');
       final raw = await File(file.path).readAsBytes();
+      final bytes = await compute<Uint8List, Uint8List>(_bakeOrientation, raw);
 
-      // Bake EXIF orientation into the pixels. Front-cam JPEGs from the
-      // flutter camera plugin carry orientation metadata that Flutter's
-      // Image.memory honours inconsistently — and the backend definitely
-      // doesn't honour it when feeding the bytes to Flux Kontext. Rewrite
-      // the pixels upright so every downstream consumer sees the correct
-      // orientation.
-      final bytes = await compute<Uint8List, Uint8List>(
-        _bakeOrientation, raw);
+      _capturedImages.add(bytes);
+      if (_angleIdx == 0) _primaryGeometry = _geometry;
 
-      if (!mounted) return;
-      final geometry = _geometry ??
-          const FaceGeometry(
-            canthalTilt: 0, symmetryScore: 70, facialThirdTop: 33,
-            facialThirdMid: 33, facialThirdLow: 34, fwhr: 1.9,
-            eyeSpacingRatio: 0.46, jawAngle: 125, chinProjection: 0,
-            hasReliableData: false,
-          );
+      HapticFeedback.heavyImpact();
 
-      context.go('/report', extra: {
-        'imageBytes': bytes,
-        'geometry':   geometry,
-      });
+      // Advance to next angle OR ship to backend
+      if (_angleIdx == 0) {
+        setState(() {
+          _phase = ScanPhase.rotateLeft;
+          _progress = 1.0;
+          _angleIdx = 1;
+        });
+        // Wait 2s for user to turn head, then re-acquire
+        _measureTimer?.cancel();
+        _measureTimer = Timer(const Duration(milliseconds: 2000), () {
+          if (!mounted) return;
+          _beginNextAngle();
+        });
+      } else if (_angleIdx == 1) {
+        setState(() {
+          _phase = ScanPhase.rotateRight;
+          _progress = 1.0;
+          _angleIdx = 2;
+        });
+        _measureTimer?.cancel();
+        _measureTimer = Timer(const Duration(milliseconds: 2000), () {
+          if (!mounted) return;
+          _beginNextAngle();
+        });
+      } else {
+        // All 3 captured → ship
+        await _shipToBackend();
+      }
     } catch (e) {
-      debugPrint('Capture/ship error: $e');
-      if (mounted) {
+      debugPrint('Snap error at angle $_angleIdx: $e');
+      // Try to continue — ship what we have if we got at least 1 image
+      if (_capturedImages.isNotEmpty) {
+        await _shipToBackend();
+      } else if (mounted) {
         setState(() {
           _phase = ScanPhase.searching;
           _faceFrames = 0;
+          _angleIdx = 0;
         });
         _camera?.startImageStream(_processFrame);
         _busy = false;
@@ -456,23 +465,71 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     }
   }
 
+  /// Restart the detection loop for the next angle.
+  void _beginNextAngle() {
+    if (!mounted) return;
+    setState(() {
+      _phase      = ScanPhase.scanning;
+      _progress   = 0.0;
+      _faceFrames = 0;
+      _mesh       = null;
+    });
+    _busy = false;
+    _camera?.startImageStream(_processFrame);
+  }
+
+  /// All 3 images captured — navigate to report with primary geometry.
+  /// Backend currently consumes only one image (front), so we send that as
+  /// imageBytes but pass all 3 as `images` for forward compatibility when
+  /// /scan is upgraded to multi-image GPT vision.
+  Future<void> _shipToBackend() async {
+    setState(() => _phase = ScanPhase.analysing);
+
+    final primaryGeom = _primaryGeometry ?? _geometry ??
+        const FaceGeometry(
+          canthalTilt: 0, symmetryScore: 70, facialThirdTop: 33,
+          facialThirdMid: 33, facialThirdLow: 34, fwhr: 1.9,
+          eyeSpacingRatio: 0.46, jawAngle: 125, chinProjection: 0,
+          hasReliableData: false,
+        );
+
+    if (!mounted) return;
+    context.go('/report', extra: {
+      'imageBytes':  _capturedImages.isNotEmpty
+          ? _capturedImages.first : Uint8List(0),
+      'geometry':    primaryGeom,
+      'extraImages': _capturedImages.length > 1
+          ? _capturedImages.sublist(1) : <Uint8List>[],
+    });
+  }
+
   String get _phaseTitle {
     switch (_phase) {
-      case ScanPhase.searching:  return 'LINE UP YOUR FACE';
-      case ScanPhase.scanning:   return _scanCopy[_copyIdx];
-      case ScanPhase.measuring:  return 'READING YOUR BONES';
-      case ScanPhase.capturing:  return 'HOLD STILL';
-      case ScanPhase.analysing:  return 'WORKING ON IT';
+      case ScanPhase.searching:
+        return _angleIdx == 0 ? 'LINE UP YOUR FACE'
+             : _angleIdx == 1 ? 'HOLD · LEFT PROFILE'
+             :                  'HOLD · RIGHT PROFILE';
+      case ScanPhase.scanning:      return _scanCopy[_copyIdx];
+      case ScanPhase.measuring:     return 'READING YOUR BONES';
+      case ScanPhase.rotateLeft:    return 'TURN LEFT · 30°';
+      case ScanPhase.rotateRight:   return 'TURN RIGHT · 30°';
+      case ScanPhase.capturing:     return 'HOLD STILL';
+      case ScanPhase.analysing:     return 'WORKING ON IT';
     }
   }
 
   String get _phaseSub {
     switch (_phase) {
-      case ScanPhase.searching:  return 'Look into the lens';
-      case ScanPhase.scanning:   return 'Mapping 468 points on your face';
-      case ScanPhase.measuring:  return 'Jawline · eyes · thirds · cheekbones';
-      case ScanPhase.capturing:  return 'Capturing your reference frame';
-      case ScanPhase.analysing:  return 'Personal analysis incoming';
+      case ScanPhase.searching:
+        return _angleIdx == 0
+          ? 'Look into the lens'
+          : 'Slow movement — keep the face in frame';
+      case ScanPhase.scanning:      return 'Mapping 468 points on your face';
+      case ScanPhase.measuring:     return 'Jawline · eyes · thirds · cheekbones';
+      case ScanPhase.rotateLeft:    return 'Show us the left side of your jaw';
+      case ScanPhase.rotateRight:   return 'One more — right side';
+      case ScanPhase.capturing:     return 'Capturing your reference frame';
+      case ScanPhase.analysing:     return 'Personal analysis incoming';
     }
   }
 

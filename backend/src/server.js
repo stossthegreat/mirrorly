@@ -21,12 +21,16 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'mirror-backend' });
 });
 
-// ── Vision analysis: GPT-4o takes image + CV measurements → returns brief + advice
+// ── Vision analysis: GPT-4o takes image(s) + CV measurements → returns brief + advice
 app.post('/analyse', async (req, res) => {
   try {
-    const { imageBase64, geometry } = req.body;
+    const { imageBase64, extraImagesBase64, geometry } = req.body;
     if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });
-    const report = await analyse({ imageBase64, geometry });
+    const report = await analyse({
+      imageBase64,
+      extraImages: Array.isArray(extraImagesBase64) ? extraImagesBase64 : [],
+      geometry,
+    });
     res.json(report);
   } catch (err) {
     console.error('[/analyse] error:', err);
@@ -50,14 +54,18 @@ app.post('/maximize', async (req, res) => {
 // ── Full pipeline: analyse → maximize in one call, geometry flowing through both
 app.post('/scan', async (req, res) => {
   try {
-    const { imageBase64, geometry } = req.body;
+    const { imageBase64, extraImagesBase64, geometry } = req.body;
     if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });
 
-    const report = await analyse({ imageBase64, geometry });
-    const maxed  = await maximize({
+    const report = await analyse({
       imageBase64,
+      extraImages: Array.isArray(extraImagesBase64) ? extraImagesBase64 : [],
+      geometry,
+    });
+    const maxed  = await maximize({
+      imageBase64, // Flux Kontext uses the front image only for identity lock
       brief: report.brief,
-      geometry, // ← identity anchors flow into the image model
+      geometry,
     });
 
     res.json({ report, maximized: maxed });
