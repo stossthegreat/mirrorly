@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
@@ -46,6 +47,21 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
 
   bool _processing = false;
 
+  // Diagnostic counters — visible on-screen so bugs in the detect pipeline
+  // (empty meshes, rotation mismatches, unsupported devices) surface loud
+  // instead of manifesting as a silent black overlay.
+  int _framesTotal = 0;
+  int _facesHit    = 0;
+  int _meshHit     = 0;
+  int _fallbackHit = 0;
+  int _lastMeshPts = 0;
+  String _pipelineErr = '';
+
+  // 60fps animation clock — drives particle drift, scan sweep, radar rings,
+  // pulse, glitch cadence. Monotonic seconds since screen init.
+  Ticker? _animTicker;
+  double _animT = 0;
+
 
   // Rotating copy per phase
   static const _scanCopy = [
@@ -61,6 +77,10 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _animTicker = createTicker((elapsed) {
+      if (!mounted) return;
+      setState(() => _animT = elapsed.inMicroseconds / 1e6);
+    })..start();
     _initCamera();
   }
 
@@ -220,6 +240,7 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     _processing = true;
 
     try {
+      _framesTotal++;
       final inputImage = _buildInputImage(image);
       if (inputImage == null) return;
 
@@ -231,15 +252,24 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
       FaceMesh? mesh;
       try {
         faces = await _faceDetector!.processImage(inputImage);
-      } catch (_) {}
+      } catch (e) {
+        _pipelineErr = 'FD: ${_trim(e)}';
+      }
       if (_meshService != null) {
         try {
           mesh = await _meshService!.detect(
             inputImage,
             (x, y) => _normalize(x, y, imgW, imgH),
           );
-        } catch (_) {}
+          if (mesh != null && mesh.isValid) {
+            _meshHit++;
+            _lastMeshPts = mesh.points.length;
+          }
+        } catch (e) {
+          _pipelineErr = 'FM: ${_trim(e)}';
+        }
       }
+      if (faces.isNotEmpty) _facesHit++;
 
       if (!mounted) return;
 
@@ -270,6 +300,8 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
         }
         if (pts.length >= 20) {
           mesh = FaceMesh(pts);
+          _fallbackHit++;
+          _lastMeshPts = pts.length;
         }
       }
 
@@ -418,11 +450,17 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     _measureTimer?.cancel();
     _countdownTimer?.cancel();
     _copyTimer?.cancel();
+    _animTicker?.dispose();
     _camera?.stopImageStream();
     _camera?.dispose();
     _faceDetector?.close();
     _meshService?.close();
     super.dispose();
+  }
+
+  String _trim(Object e) {
+    final s = e.toString();
+    return s.length > 40 ? s.substring(0, 40) : s;
   }
 
   // Cover-fill camera: scale the CameraPreview's natural AspectRatio box
@@ -442,13 +480,20 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
         child: Center(
           child: CameraPreview(
             c,
+            // LayoutBuilder + explicit `size` is critical here — a childless
+            // CustomPaint without an explicit size defaults to Size.zero, and
+            // inside CameraPreview's Stack it can silently render as a zero
+            // canvas. Passing the constraints guarantees the painter knows
+            // its real box size.
             child: LayoutBuilder(
-              builder: (_, __) => CustomPaint(
+              builder: (_, constraints) => CustomPaint(
+                size: Size(constraints.maxWidth, constraints.maxHeight),
                 painter: GeometryOverlayPainter(
                   mesh:      _mesh,
                   phase:     _phase,
                   progress:  _progress,
                   countdown: _countdown,
+                  animT:     _animT,
                 ),
               ),
             ),
@@ -563,6 +608,43 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
                 ),
               ),
             ),
+
+          // Diagnostic badge — remove once the pipeline is stable on all
+          // target devices. Shows: frames processed · faces hit · mesh hit ·
+          // contour fallbacks · last point count · last error.
+          Positioned(
+            left: 12, bottom: 14,
+            child: SafeArea(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: _meshHit > 0
+                        ? AppColors.signalGreen.withValues(alpha: 0.5)
+                        : (_fallbackHit > 0
+                            ? AppColors.signalAmber.withValues(alpha: 0.5)
+                            : AppColors.signalRed.withValues(alpha: 0.45)),
+                    width: 0.8,
+                  ),
+                ),
+                child: Text(
+                  'FR $_framesTotal · FC $_facesHit · '
+                  'MS $_meshHit · FB $_fallbackHit · PTS $_lastMeshPts'
+                  '${_pipelineErr.isNotEmpty ? '\n$_pipelineErr' : ''}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
+                    height: 1.4,
+                    fontFamilyFallback: ['monospace'],
+                  ),
+                ),
+              ),
+            ),
+          ),
 
           // Top bar — editorial masthead
           SafeArea(
