@@ -89,6 +89,8 @@ class GeometryOverlayPainter extends CustomPainter {
           _drawMeshDots(canvas, size, alphaScale: 0.55);
           _drawMeshTriangleWash(canvas, size);
           _drawBoneStructure(canvas, size, dramatic: true);
+          _drawFeatureBeam(canvas, size);             // sweeping feature scan
+          _drawDigitalRain(canvas, size);             // numbers streaming
           _drawMeasurementCallouts(canvas, size);
           _drawFloatingMeasurements(canvas, size);
           _drawRadarRings(canvas, size);
@@ -631,6 +633,159 @@ class GeometryOverlayPainter extends CustomPainter {
         }
       }
     }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Feature beam — a horizontal scan-line that sweeps down the face,
+  //  pausing at each feature with a "SCANNING [X]... LOCKED" label. This is
+  //  the biometric-grade moment that sells the precision.
+  // ═══════════════════════════════════════════════════════════════════════════
+  void _drawFeatureBeam(Canvas canvas, Size size) {
+    final points = mesh!.points;
+    if (points.length < 200) return;
+
+    // 6 feature zones, each gets its own progress slice.
+    const zones = [
+      (0.00, 0.15, 'FOREHEAD',    0.18),
+      (0.15, 0.30, 'EYE LINE',    0.30),
+      (0.30, 0.45, 'CHEEKBONES',  0.44),
+      (0.45, 0.60, 'NOSE',        0.52),
+      (0.60, 0.75, 'LIPS',        0.68),
+      (0.75, 0.92, 'JAWLINE',     0.82),
+    ];
+
+    for (final (start, end, label, yPct) in zones) {
+      if (progress < start) continue;
+      final local = ((progress - start) / (end - start)).clamp(0.0, 1.0);
+      final y = size.height * yPct;
+
+      final active = progress >= start && progress < end;
+      final locked = progress >= end;
+
+      if (active) {
+        // Bright sweeping beam across the feature's vertical band
+        final beamPaint = Paint()
+          ..shader = LinearGradient(
+            colors: [
+              Colors.transparent,
+              _cGoldHi.withValues(alpha: 0.85),
+              _cGoldHi.withValues(alpha: 1.0),
+              _cGoldHi.withValues(alpha: 0.85),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.3, 0.5, 0.7, 1.0],
+          ).createShader(Rect.fromLTWH(0, y - 1.5, size.width, 3))
+          ..strokeWidth = 2.5;
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), beamPaint);
+
+        // Feature band highlight — subtle horizontal glow strip
+        final band = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              _cGold.withValues(alpha: 0.14 * math.sin(local * math.pi)),
+              Colors.transparent,
+            ],
+          ).createShader(Rect.fromLTWH(0, y - 22, size.width, 44));
+        canvas.drawRect(Rect.fromLTWH(0, y - 22, size.width, 44), band);
+
+        // Label — "SCANNING FOREHEAD..." right side, animating in
+        _drawBeamLabel(canvas, size, y,
+          text: 'SCANNING $label...',
+          color: _cGoldHi, alpha: 0.95,
+          rightSide: true);
+      } else if (locked) {
+        // Locked — a checkmark + "LOCKED" on left side
+        _drawBeamLabel(canvas, size, y,
+          text: '✓ $label',
+          color: _cGoldHi, alpha: 0.6,
+          rightSide: false);
+      }
+    }
+  }
+
+  void _drawBeamLabel(Canvas canvas, Size size, double y, {
+    required String text,
+    required Color color,
+    required double alpha,
+    required bool rightSide,
+  }) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color.withValues(alpha: alpha),
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 2.2,
+          fontFamilyFallback: const ['monospace'],
+          shadows: [
+            Shadow(color: _cGold.withValues(alpha: alpha * 0.7), blurRadius: 6),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final x = rightSide
+      ? size.width - tp.width - 16
+      : 16.0;
+
+    // Dark pill under text for legibility
+    final rect = Rect.fromLTWH(x - 5, y - tp.height / 2 - 2, tp.width + 10, tp.height + 4);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+      Paint()..color = Colors.black.withValues(alpha: alpha * 0.6),
+    );
+    tp.paint(canvas, Offset(x, y - tp.height / 2));
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Digital rain — streams of measurement numbers falling down left + right
+  //  edges of the screen. Subtle but adds data density — feels like the whole
+  //  face is producing a firehose of values.
+  // ═══════════════════════════════════════════════════════════════════════════
+  void _drawDigitalRain(Canvas canvas, Size size) {
+    const cols = 3;
+    for (var side = 0; side < 2; side++) {
+      for (var c = 0; c < cols; c++) {
+        final seed = side * 100.0 + c * 17.0;
+        final colX = side == 0
+          ? 8.0 + c * 22
+          : size.width - 8 - (cols - c) * 22;
+        final speed = 0.55 + _hash(seed) * 0.6;
+        final offset = (animT * speed) % 1.0;
+
+        // Draw 8 characters per column, each a random measurement digit
+        for (var row = 0; row < 10; row++) {
+          final y = (offset * size.height + row * 26) % (size.height + 60) - 30;
+          final alphaFade = math.max(0.0, 1 - row / 10) * 0.5;
+
+          final digit = _pickDigit(seed + row * 3.3 + animT * 0.3);
+          final tp = TextPainter(
+            text: TextSpan(
+              text: digit,
+              style: TextStyle(
+                color: _cCyan.withValues(alpha: alphaFade),
+                fontSize: 10,
+                fontFamilyFallback: const ['monospace'],
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          tp.paint(canvas, Offset(colX, y));
+        }
+      }
+    }
+  }
+
+  String _pickDigit(double seed) {
+    const chars = ['0','1','2','3','4','5','6','7','8','9',
+                   'mm','°','%','.',':','/','·','▸','◉','◆','◇'];
+    final i = (_hash(seed) * chars.length).floor() % chars.length;
+    return chars[i];
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

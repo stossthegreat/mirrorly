@@ -83,25 +83,35 @@ function buildPrompt({ styleRequest, category, anchors }) {
     ? `\nNOTE ON HIDDEN GEOMETRY: the jaw beneath any beard is ${anchors.find(a => a.startsWith('jaw angle')) ?? 'as measured'}. Use this when rendering.\n`
     : '';
 
-  return `Edit this photo to show the EXACT SAME PERSON with this single change: "${styleRequest}".
+  return `Edit this photo to show the EXACT SAME PERSON at their best with this single change: "${styleRequest}".
+
+This should feel like the person had a great salon / barber / stylist visit and is now back home, well-rested, in flattering natural light. Same face. Same identity. Same age. BETTER presentation.
 
 ${guidance}
 ${geoBlock}${beardNote}
-CRITICAL — preserve at pixel level:
-- SAME PERSON. Same apparent age. Same ethnicity. Same skin tone.
-- Bone structure, eye shape/size/colour, nose shape, lip shape, chin, jawline geometry.
-- Everything NOT named in the edit request.
+IDENTITY — preserve at pixel level:
+- SAME PERSON. Same apparent age (or 1-2 years younger, never older).
+- Same ethnicity. Same natural skin tone.
+- Bone structure, eye shape/size/colour, nose shape, lip shape, chin, jawline.
+- Everything NOT named in the edit request stays identical.
 - Pose, angle, expression, lighting quality, background.
 
+APPLY ALONGSIDE THE EDIT — subtle lifts that make the twin desirable:
+- Clean, healthy skin tone. No blemishes but keep natural texture.
+- Bright rested eyes, no puffiness.
+- Flattering soft daylight.
+- Well-groomed version (hair tidy, beard neat if present).
+
 ABSOLUTE FAIL CONDITIONS:
-- DO NOT age the subject (no wrinkles, no thinning, no greying unless that's the request).
-- DO NOT make the subject look less attractive. The edit should read as a realistic improvement, never a downgrade.
-- DO NOT apply plastic/filter smoothing. Natural skin texture stays.
-- DO NOT change bone structure or facial identity. If unsure, err toward preserving.
-- DO NOT stylise. No painterly, no HDR, no oversaturation.
-- DO NOT generate a DIFFERENT person who merely resembles the subject.
+- DO NOT age the subject. No new wrinkles, no thinning hair, no greying unless it's the request.
+- DO NOT make the subject look less attractive. The render is a glow-up, not a downgrade.
+- DO NOT apply plastic / filter / glass smoothing. Natural pores stay.
+- DO NOT change bone structure or facial identity.
+- DO NOT stylise — no painterly, no HDR, no oversaturation.
+- DO NOT render a DIFFERENT person who merely resembles the subject.
+- DO NOT render lifeless or emotionless — energy matches the source.
 
-STYLE: photorealistic portrait photography. Natural daylight. Same pose, same angle, same expression. Shot on 85mm lens, f/2.8.
+STYLE: photorealistic portrait photography. Natural soft daylight (window or golden hour). Shot on 85mm lens, f/2.8. Modern editorial portrait quality.
 
-SUCCESS TEST: the viewer must say "that's the exact same person, just with [${styleRequest}]". If the viewer says "looks similar" or "different person" — the edit has failed.`;
+SUCCESS TEST: the person seeing this should say "that's me after a great day and a fresh [${styleRequest}]". If they say "that's not me" → identity drifted. If they say "I look worse" → improvements not applied. Both fail.`;
 }

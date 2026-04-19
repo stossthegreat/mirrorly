@@ -4,24 +4,23 @@ const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 const MODEL = 'black-forest-labs/flux-kontext-max';
 
 /**
- * Generate the Maximized Twin — the same person at their best.
+ * Generate the Maximized Twin — the SAME person, visibly at their best day.
  *
- * Critical tuning notes (learned the hard way):
- * 1. Flux Kontext Max tends to AGE the subject by default. Must explicitly
- *    preserve apparent age and rule out aging artefacts.
- * 2. Identity drift occurs when the prompt is too open. Must anchor with
- *    specific geometry values and the "same person" phrase repeated.
- * 3. If the subject has a beard, Flux cannot see the underlying jaw — so
- *    the result may look "wrong" when we try to render them leaner. Add
- *    a pose-preserve constraint so the beard itself remains.
- * 4. The improvements list is capped at 2–3 items. More = identity drift.
+ * Hard-won tuning:
+ * - Identity-preserve prompts alone produce "same person, no visible upgrade."
+ *   The user sees themselves copied + slightly worse and feels bad.
+ * - Must LEAN HARD into improvements (skin, lighting, rested look, hair
+ *   tidier) while anchoring identity via measured geometry.
+ * - Explicit "best day" framing gets Flux Kontext to produce the lift the
+ *   user actually wants — not just a clone.
+ * - YOUNGER, not older. Wrinkles / tired / aged = fail conditions.
  */
 export async function maximize({ imageBase64, brief, geometry }) {
-  const improve  = (brief?.improve  ?? []).slice(0, 3);
+  const improve  = (brief?.improve  ?? []).slice(0, 4);
   const preserve = brief?.preserve ?? [];
 
-  const geometryAnchors = buildAnchors(geometry);
-  const prompt = buildPrompt({ geometryAnchors, improve, preserve });
+  const anchors = buildAnchors(geometry);
+  const prompt = buildPrompt({ anchors, improve, preserve });
 
   const input = {
     prompt,
@@ -29,7 +28,7 @@ export async function maximize({ imageBase64, brief, geometry }) {
     aspect_ratio: 'match_input_image',
     output_format: 'jpg',
     safety_tolerance: 2,
-    prompt_upsampling: false, // keep prompt exact
+    prompt_upsampling: false,
   };
 
   const output = await replicate.run(MODEL, { input });
@@ -43,68 +42,73 @@ export async function maximize({ imageBase64, brief, geometry }) {
 function buildAnchors(geometry) {
   if (!geometry) return [];
   return [
-    geometry.canthalTilt     != null ? `canthal tilt ${geometry.canthalTilt.toFixed(1)}°`     : null,
-    geometry.fwhr            != null ? `FWHR ${geometry.fwhr.toFixed(2)}`                      : null,
-    geometry.eyeSpacingRatio != null ? `eye spacing ${geometry.eyeSpacingRatio.toFixed(2)}`    : null,
-    geometry.jawAngle        != null ? `jaw angle ${geometry.jawAngle.toFixed(0)}°`             : null,
+    geometry.canthalTilt     != null ? `canthal tilt ${geometry.canthalTilt.toFixed(1)}°`       : null,
+    geometry.fwhr            != null ? `FWHR ${geometry.fwhr.toFixed(2)}`                        : null,
+    geometry.eyeSpacingRatio != null ? `eye spacing ${geometry.eyeSpacingRatio.toFixed(2)}`      : null,
+    geometry.jawAngle        != null ? `jaw angle ${geometry.jawAngle.toFixed(0)}°`              : null,
     geometry.faceLengthRatio != null ? `face length ratio ${geometry.faceLengthRatio.toFixed(2)}`: null,
     geometry.headShape       ? `head shape ${geometry.headShape}` : null,
-    geometry.lipFullness     != null ? `lip fullness ${geometry.lipFullness.toFixed(2)}`        : null,
+    geometry.lipFullness     != null ? `lip fullness ${geometry.lipFullness.toFixed(2)}`         : null,
     geometry.facialThirdTop  != null
       ? `thirds ${geometry.facialThirdTop.toFixed(0)}/${geometry.facialThirdMid.toFixed(0)}/${geometry.facialThirdLow.toFixed(0)}`
       : null,
   ].filter(Boolean);
 }
 
-function buildPrompt({ geometryAnchors, improve, preserve }) {
+function buildPrompt({ anchors, improve, preserve }) {
+  // SAME person, but their BEST version. The improvement list is LOADED —
+  // we want a visible uplift, not a pixel clone.
+  const improveList = improve.length > 0 ? improve : [
+    'clear, even skin with a healthy natural tone and vitality',
+    'bright rested eyes, no dark circles, no puffiness',
+    'tidied eyebrows, cleanly groomed hairline, neat hair',
+    'subtle natural contouring from flattering soft daylight',
+    'fuller natural-looking skin volume (well-rested, well-hydrated look)',
+    'neatly trimmed facial hair if present — or clean smooth skin if not',
+    'slightly leaner, more defined facial contours (not gaunt — healthy lean)',
+  ];
+
   const preserveList = [
-    'exact same person',
-    'same apparent age — do NOT age the subject older or younger',
-    'exact bone structure and proportions',
-    'exact eye shape, eye colour, eye size, distance between eyes',
-    'exact nose shape and width and length',
-    'exact lip shape and fullness',
-    'exact face width and length ratio',
-    'exact ethnicity and skin tone',
-    'exact jawline geometry',
+    'the EXACT SAME PERSON — same face, same identity',
+    'SAME APPARENT AGE (or 1-2 years YOUNGER — never older)',
+    'exact eye shape, eye colour, eye size, inter-eye distance',
+    'exact nose shape, width, length',
+    'exact lip shape and proportions',
+    'exact bone structure, face length, face width',
+    'exact ethnicity and natural skin tone',
+    'exact jawline geometry (the measured angle above)',
     'exact brow position and shape',
-    'exact hairline and hair colour (unless explicitly changed)',
-    'exact facial hair presence (beard/stubble stays unless explicitly changed)',
-    'same pose, same angle, same expression',
+    'same hair colour (unless explicitly changed)',
+    'same beard/stubble presence (unless explicitly changed)',
+    'same pose, angle, expression',
     ...preserve,
   ];
 
-  const improveList = (improve && improve.length > 0) ? improve : [
-    'improved skin clarity — even tone, reduced blemishes, KEEP natural skin texture',
-    'subtle under-eye brightness — reduce dark circles without smoothing',
-    'subtle natural contrast lift from better lighting — do not sharpen features',
-  ];
-
-  const geometryBlock = geometryAnchors.length > 0
-    ? `\nMEASURED IDENTITY ANCHORS — these values MUST be preserved exactly:\n${geometryAnchors.map(g => `- ${g}`).join('\n')}\n`
+  const geoBlock = anchors.length > 0
+    ? `\nMEASURED IDENTITY ANCHORS — do not alter:\n${anchors.map(g => `- ${g}`).join('\n')}\n`
     : '';
 
-  return `Edit this photo to show the EXACT SAME PERSON at their best — a subtle, believable improvement. NOT a transformation. NOT a beautification. NOT a filter. A realistic version of the same person on a better day.
-${geometryBlock}
-CRITICAL IDENTITY PRESERVATION — do NOT change:
-${preserveList.map(p => `- ${p}`).join('\n')}
+  return `Produce the best-day version of the SAME person in this photo. Imagine this person: well-rested, well-lit, clean skin, healthy colour, tidy grooming. That is what you render. Same face, same age, same identity — visibly at their peak.
 
-APPLY THESE IMPROVEMENTS ONLY — subtle, never heavy-handed:
+This is NOT a filter. NOT a beautification. NOT a transformation. It is a believable high-quality portrait of the exact same person after 8 hours of sleep, good skincare, a fresh haircut, great lighting, and a good mood.
+${geoBlock}
+APPLY ALL OF THESE LIFT the presentation without touching identity:
 ${improveList.map(i => `- ${i}`).join('\n')}
 
-ABSOLUTE RULES — these are FAIL conditions, not suggestions:
-- DO NOT make the subject look OLDER. Preserve apparent age exactly.
-- DO NOT make the subject look UGLIER or more tired. Preserve freshness.
-- DO NOT apply a "beauty filter" smoothing — skin texture must remain natural.
-- DO NOT enlarge eyes, narrow nose, sharpen jaw structurally. Only lighting/contrast may enhance existing structure.
-- DO NOT change ethnicity, bone structure, or any identifying feature.
-- DO NOT stylise, paint, HDR, oversaturate, or add any artistic effect.
-- DO NOT add symmetrical perfection — natural asymmetries must remain.
-- DO NOT change expression, pose, or angle.
-- DO NOT change the background beyond a clean neutralisation.
-- DO NOT change what is covered by facial hair — if there is a beard, it stays.
+IDENTITY — preserve at pixel level:
+${preserveList.map(p => `- ${p}`).join('\n')}
 
-STYLE: photorealistic portrait photography, natural daylight, same pose, same angle, same expression, same framing. Shot on an 85mm lens.
+ABSOLUTE FAIL CONDITIONS — these make the output unusable:
+- Do NOT age the subject. No new wrinkles, no thinning hair, no greying unless they already have it.
+- Do NOT make the subject look less attractive, more tired, more gaunt, or puffier.
+- Do NOT apply plastic / glass / filter skin smoothing. Keep natural texture with pores.
+- Do NOT enlarge eyes, narrow nose, carve jaw, or alter bone structure.
+- Do NOT change ethnicity, eye colour, or identity.
+- Do NOT stylise, paint, HDR, or oversaturate.
+- Do NOT add symmetry perfection — natural micro-asymmetries stay.
+- Do NOT change pose, angle, expression, or background beyond a clean lighting neutralisation.
 
-SUCCESS TEST: a friend who knows this person should say "they look great today" — not "did they get work done" or "who is that?". If the identity drifts, the render has failed.`;
+STYLE: photorealistic portrait photography, shot on 85mm lens at f/2.8, natural window light, modern magazine editorial quality. Same pose, same angle, same framing.
+
+SUCCESS TEST — the person viewing their twin should say: "that's me on a great day". If they say "that's not me" → identity drifted. If they say "I look worse" → improvements not applied. Both are failure states.`;
 }
