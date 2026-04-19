@@ -43,13 +43,16 @@ class FaceMeshService {
   final FaceMeshDetector _detector =
       FaceMeshDetector(option: FaceMeshDetectorOptions.faceMesh);
 
-  Future<FaceMesh?> detect(InputImage image, double imgW, double imgH) async {
+  Future<FaceMesh?> detect(
+    InputImage image,
+    Offset Function(double x, double y) mapper,
+  ) async {
     final meshes = await _detector.processImage(image);
     if (meshes.isEmpty) return null;
 
     final m = meshes.first;
     final pts = m.points
-        .map((p) => Offset(p.x / imgW, p.y / imgH))
+        .map((p) => mapper(p.x.toDouble(), p.y.toDouble()))
         .toList(growable: false);
     return FaceMesh(pts);
   }

@@ -5,9 +5,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/face_geometry.dart';
 import '../../models/mirror_analysis.dart';
+import '../../services/archetype_service.dart';
 import '../../services/mirror_api_service.dart';
+import '../../services/scoring_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
+import '../../widgets/report/archetype_card.dart';
+import '../../widgets/report/score_card.dart';
 
 class ReportScreen extends StatefulWidget {
   final Uint8List imageBytes;
@@ -127,6 +131,9 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Widget _buildReport(MirrorAnalysis a) {
+    final score = ScoringService.compute(widget.geometry);
+    final match = ArchetypeService.bestMatch(widget.geometry);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.md, Sp.lg, Sp.lg),
       child: Column(
@@ -137,16 +144,45 @@ class _ReportScreenState extends State<ReportScreen> {
             color: AppColors.textTertiary, letterSpacing: 2.5))
             .animate().fadeIn(duration: 400.ms),
           const SizedBox(height: Sp.xs),
-          Text('3 fixes. Same face.', style: AppTypography.h1)
+          Text('Your face, measured.', style: AppTypography.h1)
             .animate().fadeIn(delay: 100.ms, duration: 400.ms),
 
           const SizedBox(height: Sp.xl),
 
+          // ── Hero: Aesthetic Index score ─────────────────────────────────
+          ScoreCard(score: score)
+            .animate().fadeIn(delay: 160.ms, duration: 500.ms)
+            .slideY(begin: 0.04, end: 0, duration: 500.ms, delay: 160.ms,
+                curve: Curves.easeOut),
+
+          const SizedBox(height: Sp.md),
+
+          // ── Archetype match ─────────────────────────────────────────────
+          ArchetypeCard(match: match)
+            .animate().fadeIn(delay: 320.ms, duration: 500.ms)
+            .slideY(begin: 0.04, end: 0, duration: 500.ms, delay: 320.ms,
+                curve: Curves.easeOut),
+
+          const SizedBox(height: Sp.md),
+
+          // ── Consultation CTA — sends into face-aware chat ───────────────
+          _ConsultCard(
+            onTap: () => context.push(
+              '/chat',
+              extra: {'geometry': widget.geometry},
+            ),
+          ).animate().fadeIn(delay: 460.ms, duration: 500.ms),
+
+          const SizedBox(height: Sp.xl),
+
           // Before/after split
+          Text('THE MAXIMIZED TWIN', style: AppTypography.label.copyWith(
+            color: AppColors.textTertiary, letterSpacing: 2.5)),
+          const SizedBox(height: Sp.sm),
           _BeforeAfter(
             before: widget.imageBytes,
             afterUrl: a.maximizedImageUrl,
-          ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
+          ).animate().fadeIn(delay: 600.ms, duration: 600.ms),
 
           const SizedBox(height: Sp.xl),
 
@@ -156,7 +192,7 @@ class _ReportScreenState extends State<ReportScreen> {
               label: 'YOUR BONE STRUCTURE',
               color: AppColors.measure,
               body: a.report.boneReading,
-            ).animate().fadeIn(delay: 400.ms),
+            ).animate().fadeIn(delay: 760.ms),
             const SizedBox(height: Sp.md),
           ],
 
@@ -165,7 +201,7 @@ class _ReportScreenState extends State<ReportScreen> {
             label: 'ALREADY WORKING',
             color: AppColors.signalGreen,
             body: a.report.strongest,
-          ).animate().fadeIn(delay: 500.ms),
+          ).animate().fadeIn(delay: 860.ms),
 
           const SizedBox(height: Sp.md),
 
@@ -174,39 +210,134 @@ class _ReportScreenState extends State<ReportScreen> {
             label: 'WHAT\'S HOLDING IT BACK',
             color: AppColors.signalRed,
             body: a.report.pulldown,
-          ).animate().fadeIn(delay: 620.ms),
+          ).animate().fadeIn(delay: 960.ms),
 
           const SizedBox(height: Sp.xl),
 
           // Fixes
           Text('FIXES — ORDERED BY LEVERAGE', style: AppTypography.label.copyWith(
             color: AppColors.accent, letterSpacing: 2.0))
-            .animate().fadeIn(delay: 740.ms),
+            .animate().fadeIn(delay: 1080.ms),
           const SizedBox(height: Sp.sm),
           ...a.report.fixes.asMap().entries.map((e) =>
             _FixCard(index: e.key + 1, fix: e.value)
-              .animate().fadeIn(delay: Duration(milliseconds: 820 + e.key * 100))),
+              .animate().fadeIn(delay: Duration(milliseconds: 1140 + e.key * 100))),
 
           const SizedBox(height: Sp.xl),
 
           // Verdict
           _Verdict(text: a.report.verdict)
-            .animate().fadeIn(delay: 1200.ms, duration: 500.ms)
+            .animate().fadeIn(delay: 1500.ms, duration: 500.ms)
             .slideY(begin: 0.05, end: 0,
-                delay: 1200.ms, duration: 500.ms, curve: Curves.easeOut),
+                delay: 1500.ms, duration: 500.ms, curve: Curves.easeOut),
 
           const SizedBox(height: Sp.xl),
 
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton(
-              onPressed: () => context.go('/scan'),
-              child: const Text('New scan'),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: AppColors.accent.withValues(alpha: 0.4)),
+                      foregroundColor: AppColors.textPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(Rd.lg)),
+                    ),
+                    onPressed: () => context.go('/scan'),
+                    child: const Text('Re-scan'),
+                  ),
+                ),
+              ),
+              const SizedBox(width: Sp.sm),
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.gold,
+                      foregroundColor: AppColors.base,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(Rd.lg)),
+                    ),
+                    onPressed: () => context.push(
+                      '/chat',
+                      extra: {'geometry': widget.geometry},
+                    ),
+                    child: const Text('Consult',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: Sp.md),
         ],
+      ),
+    );
+  }
+}
+
+// ── Consultation CTA card ────────────────────────────────────────────────────
+class _ConsultCard extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ConsultCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Rd.xl),
+        child: Container(
+          padding: const EdgeInsets.all(Sp.md),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.gold.withValues(alpha: 0.10),
+                AppColors.gold.withValues(alpha: 0.03),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(Rd.xl),
+            border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.gold.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.gold.withValues(alpha: 0.6), width: 0.8),
+                ),
+                child: const Icon(Icons.auto_awesome,
+                  size: 18, color: AppColors.gold),
+              ),
+              const SizedBox(width: Sp.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('CONSULT THE AI',
+                      style: AppTypography.label.copyWith(
+                        color: AppColors.gold, letterSpacing: 2.6, fontSize: 9)),
+                    const SizedBox(height: 3),
+                    Text('Ask about haircut, beard, skin, surgery — answered '
+                         'against your measured bones.',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppColors.textSecondary, fontSize: 12, height: 1.4)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(Icons.arrow_forward_rounded,
+                size: 18, color: AppColors.gold),
+            ],
+          ),
+        ),
       ),
     );
   }

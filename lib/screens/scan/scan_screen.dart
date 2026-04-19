@@ -26,6 +26,11 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
   FaceDetector?     _faceDetector;
   FaceMeshService?  _meshService;
 
+  // Image orientation snapshot taken at init, reused for every frame's point
+  // transform so landmarks rotate/mirror into the same space as the preview.
+  InputImageRotation _rotation = InputImageRotation.rotation0deg;
+  bool _isFrontCam = false;
+
   ScanPhase    _phase    = ScanPhase.searching;
   FaceMesh?    _mesh;
   FaceGeometry? _geometry;
@@ -41,12 +46,6 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
 
   bool _processing = false;
 
-  // Debug counters — live status badge
-  int _framesProcessed = 0;
-  int _facesDetected   = 0;
-  int _meshHits        = 0;
-  int _meshFallbacks   = 0;
-  String _lastError    = '';
 
   // Rotating copy per phase
   static const _scanCopy = [
@@ -82,6 +81,12 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
         minFaceSize: 0.25,
       ),
     );
+
+    _rotation = Platform.isIOS
+        ? InputImageRotation.rotation0deg
+        : (InputImageRotationValue.fromRawValue(front.sensorOrientation)
+              ?? InputImageRotation.rotation270deg);
+    _isFrontCam = front.lensDirection == CameraLensDirection.front;
 
     // Google ML Kit Face Mesh Detection is Android-only — trying to use it
     // on iOS throws MissingPluginException and kills the processing loop.
@@ -186,6 +191,28 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ML Kit returns landmark points in the *buffer* coordinate system (the raw,
+  // un-rotated camera frame). Our preview is rotated to upright + mirrored for
+  // the front cam, so we apply the matching rotation + mirror to every point
+  // before painting, otherwise the mesh lands off the face (or off-screen).
+  Offset _normalize(double bx, double by, double bufW, double bufH) {
+    double rx, ry, rw, rh;
+    switch (_rotation) {
+      case InputImageRotation.rotation90deg:
+        rx = bufH - by; ry = bx;          rw = bufH; rh = bufW; break;
+      case InputImageRotation.rotation180deg:
+        rx = bufW - bx; ry = bufH - by;   rw = bufW; rh = bufH; break;
+      case InputImageRotation.rotation270deg:
+        rx = by;        ry = bufW - bx;   rw = bufH; rh = bufW; break;
+      case InputImageRotation.rotation0deg:
+        rx = bx;        ry = by;          rw = bufW; rh = bufH; break;
+    }
+    var nx = rx / rw;
+    final ny = ry / rh;
+    if (_isFrontCam) nx = 1.0 - nx;
+    return Offset(nx, ny);
+  }
+
   Future<void> _processFrame(CameraImage image) async {
     if (_processing ||
         _phase == ScanPhase.capturing ||
@@ -193,7 +220,6 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     _processing = true;
 
     try {
-      _framesProcessed++;
       final inputImage = _buildInputImage(image);
       if (inputImage == null) return;
 
@@ -205,22 +231,17 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
       FaceMesh? mesh;
       try {
         faces = await _faceDetector!.processImage(inputImage);
-      } catch (e) {
-        _lastError = e.toString().substring(0, e.toString().length.clamp(0, 60));
-      }
+      } catch (_) {}
       if (_meshService != null) {
         try {
-          mesh = await _meshService!.detect(inputImage, imgW, imgH);
-        } catch (_) {
-          // Face mesh detection unsupported on this platform/device — silently
-          // fall through to face-detection contour fallback below.
-        }
+          mesh = await _meshService!.detect(
+            inputImage,
+            (x, y) => _normalize(x, y, imgW, imgH),
+          );
+        } catch (_) {}
       }
 
       if (!mounted) return;
-
-      if (faces.isNotEmpty) _facesDetected++;
-      if (mesh != null && mesh.isValid) _meshHits++;
 
       if (faces.isEmpty) {
         _faceFrames = 0;
@@ -230,8 +251,6 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
             _progress = 0;
             _mesh     = null;
           });
-        } else {
-          setState(() {});  // refresh debug badge
         }
         return;
       }
@@ -246,12 +265,11 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
         for (final contour in face.contours.values) {
           if (contour == null) continue;
           for (final p in contour.points) {
-            pts.add(Offset(p.x / imgW, p.y / imgH));
+            pts.add(_normalize(p.x.toDouble(), p.y.toDouble(), imgW, imgH));
           }
         }
         if (pts.length >= 20) {
           mesh = FaceMesh(pts);
-          _meshFallbacks++;
         }
       }
 
@@ -407,18 +425,53 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  // Cover-fill camera: scale the CameraPreview's natural AspectRatio box
+  // up until it fully covers the screen (parts of the preview are clipped on
+  // the overflow side). The mesh overlay is passed as CameraPreview's `child`
+  // so it inhabits the SAME coord space as the preview texture and therefore
+  // stays aligned with the face no matter how much we scale.
+  Widget _fullscreenCamera(CameraController c) {
+    final size = MediaQuery.of(context).size;
+    var scale = size.aspectRatio * c.value.aspectRatio;
+    if (scale < 1) scale = 1 / scale;
+
+    return ClipRect(
+      child: Transform.scale(
+        scale: scale,
+        alignment: Alignment.center,
+        child: Center(
+          child: CameraPreview(
+            c,
+            child: LayoutBuilder(
+              builder: (_, __) => CustomPaint(
+                painter: GeometryOverlayPainter(
+                  mesh:      _mesh,
+                  phase:     _phase,
+                  progress:  _progress,
+                  countdown: _countdown,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final preview = _camera;
+    final initialized = preview != null && preview.value.isInitialized;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          if (preview != null && preview.value.isInitialized)
-            Positioned.fill(child: CameraPreview(preview))
+          if (initialized)
+            _fullscreenCamera(preview)
           else
-            const Positioned.fill(child: ColoredBox(color: Colors.black)),
+            const ColoredBox(color: Colors.black),
 
           // Darken edges for focus
           Positioned.fill(
@@ -436,132 +489,135 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
             ),
           ),
 
-          // The mesh overlay (scroll-stopping visual)
-          Positioned.fill(
-            child: CustomPaint(
-              painter: GeometryOverlayPainter(
-                mesh:      _mesh,
-                phase:     _phase,
-                progress:  _progress,
-                countdown: _countdown,
-              ),
-            ),
-          ),
-
-          // Phase HUD — bottom
+          // Phase HUD — bottom, editorial format (indexed label + italic sub)
           Positioned(
-            left: 0, right: 0, bottom: 72,
+            left: 0, right: 0, bottom: 84,
             child: Column(
               children: [
+                // Index badge — "01 / 05" surgical counter feel
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(
+                      color: AppColors.gold.withValues(alpha: 0.35), width: 0.8),
+                  ),
+                  child: Text(
+                    '${(_phase.index + 1).toString().padLeft(2, '0')} / 05  ·  '
+                    '${_phase.name.toUpperCase()}',
+                    style: AppTypography.label.copyWith(
+                      color: AppColors.gold,
+                      fontSize: 9,
+                      letterSpacing: 2.4,
+                    ),
+                  ),
+                ).animate(key: ValueKey(_phase))
+                  .fadeIn(duration: 260.ms)
+                  .slideY(begin: 0.3, end: 0, duration: 260.ms, curve: Curves.easeOut),
+
+                // Main phase title
                 Text(_phaseTitle,
                   key: ValueKey('$_phase-$_copyIdx'),
                   textAlign: TextAlign.center,
-                  style: AppTypography.label.copyWith(
-                    color: AppColors.measure,
-                    fontSize: 12,
-                    letterSpacing: 2.5,
+                  style: AppTypography.labelBold.copyWith(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    letterSpacing: 3.2,
                   ),
                 ).animate(key: ValueKey('$_phase-$_copyIdx'))
                   .fadeIn(duration: 220.ms),
-                const SizedBox(height: 6),
-                Text(_phaseSub,
-                  textAlign: TextAlign.center,
-                  style: AppTypography.bodySmall.copyWith(
-                    color: AppColors.textTertiary,
-                    fontSize: 12,
-                  ),
-                ).animate(key: ValueKey(_phase))
-                  .fadeIn(duration: 300.ms),
+
+                const SizedBox(height: 8),
+
+                // Italic sub — luxury editorial undertext
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 48),
+                  child: Text(_phaseSub,
+                    textAlign: TextAlign.center,
+                    style: AppTypography.h1Italic.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                      letterSpacing: 0.1,
+                      height: 1.4,
+                    ),
+                  ).animate(key: ValueKey(_phase))
+                    .fadeIn(duration: 300.ms),
+                ),
               ],
             ),
           ),
 
-          // Progress bar during scanning
+          // Progress bar during scanning — gold hairline
           if (_phase == ScanPhase.scanning || _phase == ScanPhase.measuring)
             Positioned(
-              left: 48, right: 48, bottom: 54,
+              left: 40, right: 40, bottom: 56,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(2),
                 child: LinearProgressIndicator(
                   value: _progress,
-                  backgroundColor: AppColors.surface3,
-                  valueColor: const AlwaysStoppedAnimation(AppColors.measure),
-                  minHeight: 2,
+                  backgroundColor: AppColors.surface3.withValues(alpha: 0.5),
+                  valueColor: const AlwaysStoppedAnimation(AppColors.gold),
+                  minHeight: 1.5,
                 ),
               ),
             ),
 
-          // Debug badge — remove before final ship
-          Positioned(
-            left: 12, bottom: 12,
-            child: SafeArea(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'FR $_framesProcessed · FC $_facesDetected · MS $_meshHits · FB $_meshFallbacks'
-                  '${_lastError.isNotEmpty ? "\nERR: $_lastError" : ""}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // Top bar
+          // Top bar — editorial masthead
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.sm, Sp.md, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('MIRRORLY',
-                    style: AppTypography.label.copyWith(
-                      color: AppColors.textPrimary,
-                      fontSize: 12,
-                      letterSpacing: 4,
-                    )),
-                  const SizedBox(width: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface2.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text('MESH · 468',
-                      style: AppTypography.label.copyWith(
-                        color: AppColors.textTertiary,
-                        fontSize: 8,
-                        letterSpacing: 1.5,
-                      )),
-                  ),
-                  const Spacer(),
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => context.push('/settings'),
-                      borderRadius: BorderRadius.circular(22),
-                      child: Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.45),
+                  Row(
+                    children: [
+                      // Wordmark — serif, editorial
+                      Text('Mirrorly',
+                        style: AppTypography.h1.copyWith(
+                          fontSize: 22,
+                          letterSpacing: -0.6,
+                          color: AppColors.textPrimary,
+                          height: 1,
+                        )),
+                      const SizedBox(width: 10),
+                      Container(
+                        width: 4, height: 4,
+                        margin: const EdgeInsets.only(top: 6),
+                        decoration: const BoxDecoration(
+                          color: AppColors.gold,
                           shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.textSecondary.withValues(alpha: 0.25),
-                            width: 1),
                         ),
-                        child: const Icon(Icons.settings_outlined,
-                          size: 18, color: AppColors.textPrimary),
                       ),
-                    ),
+                      const Spacer(),
+                      // Settings button — gold-lined, minimal
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => context.push('/settings'),
+                          borderRadius: BorderRadius.circular(22),
+                          child: Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.gold.withValues(alpha: 0.4),
+                                width: 0.8),
+                            ),
+                            child: const Icon(Icons.tune,
+                              size: 16, color: AppColors.gold),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 2),
+                  // Under-byline
+                  Text('THE FACE, MEASURED',
+                    style: AppTypography.label.copyWith(
+                      color: AppColors.textMuted, fontSize: 8, letterSpacing: 2.8)),
                 ],
               ),
             ),

@@ -22,6 +22,7 @@ class GeometryOverlayPainter extends CustomPainter {
 
   static const _dotColor     = Color(0xFF818CF8); // indigo-400
   static const _measureColor = Color(0xFF38BDF8); // sky-400
+  static const _boneColor    = Color(0xFFD4A96A); // gold — structural bone lines
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -47,6 +48,15 @@ class GeometryOverlayPainter extends CustomPainter {
          phase == ScanPhase.capturing ||
          phase == ScanPhase.analysing)) {
       _drawMeshLines(canvas, size);
+    }
+
+    // Bone structure lines — the premium visual. Drawn during measuring/
+    // capturing phases on top of the mesh to show the user we're reading
+    // cranial structure, not just surface points. Gold = premium/earned.
+    if (phase == ScanPhase.measuring ||
+        phase == ScanPhase.capturing ||
+        phase == ScanPhase.analysing) {
+      _drawBoneStructure(canvas, size);
     }
 
     // Measurement callouts — after dots are mostly in
@@ -151,6 +161,111 @@ class GeometryOverlayPainter extends CustomPainter {
         Offset(pb.dx * size.width, pb.dy * size.height),
         linePaint,
       );
+    }
+  }
+
+  // ── Bone structure lines (mandible, zygomatic, orbital, frontal, chin) ────
+  // Gold, surgical. Each segment fades in in sequence so the user perceives
+  // the *reveal* of structure — not just decoration.
+  void _drawBoneStructure(Canvas canvas, Size size) {
+    final points = mesh!.points;
+    // The bone lines rely on MediaPipe 468-index topology. On the iOS
+    // contour fallback we only get unindexed outline points — skip rather
+    // than draw nonsense lines.
+    if (points.length < 200) return;
+
+    // Progress 0–1 controls sequential reveal; after capturing hold at full.
+    final reveal = phase == ScanPhase.measuring
+        ? ((progress - 0.15) / 0.6).clamp(0.0, 1.0)
+        : 1.0;
+    if (reveal <= 0) return;
+
+    Offset? px(int i) {
+      if (i >= points.length) return null;
+      final p = points[i];
+      return Offset(p.dx * size.width, p.dy * size.height);
+    }
+
+    void drawChain(List<int> indices, double phaseStart, double phaseEnd,
+        {double width = 1.3, double alpha = 0.85}) {
+      final local = ((reveal - phaseStart) / (phaseEnd - phaseStart)).clamp(0.0, 1.0);
+      if (local <= 0) return;
+      final pts = indices.map(px).whereType<Offset>().toList();
+      if (pts.length < 2) return;
+
+      // Reveal by drawing only a fraction of segments
+      final totalSegs = pts.length - 1;
+      final drawSegs  = (totalSegs * local).floor();
+      final partial   = (totalSegs * local) - drawSegs;
+
+      final paint = Paint()
+        ..color = _boneColor.withValues(alpha: alpha * local.clamp(0.35, 1.0))
+        ..strokeWidth = width
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+
+      final path = Path()..moveTo(pts[0].dx, pts[0].dy);
+      for (var i = 1; i <= drawSegs; i++) {
+        path.lineTo(pts[i].dx, pts[i].dy);
+      }
+      if (drawSegs < totalSegs && partial > 0) {
+        final a = pts[drawSegs];
+        final b = pts[drawSegs + 1];
+        path.lineTo(a.dx + (b.dx - a.dx) * partial,
+                    a.dy + (b.dy - a.dy) * partial);
+      }
+      canvas.drawPath(path, paint);
+
+      // Anchor pips at joint points
+      final pipPaint = Paint()
+        ..color = _boneColor.withValues(alpha: 0.95 * local)
+        ..style = PaintingStyle.fill;
+      for (var i = 0; i < drawSegs + 1 && i < pts.length; i++) {
+        canvas.drawCircle(pts[i], 1.6, pipPaint);
+      }
+    }
+
+    // Mandible (jaw line) — the defining bone. First to reveal.
+    drawChain(const [
+      234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152,
+      377, 400, 378, 379, 365, 397, 288, 361, 323, 454,
+    ], 0.00, 0.35, width: 1.6);
+
+    // Zygomatic shelf (cheekbone plane) — left
+    drawChain(const [234, 227, 116, 123, 117, 118, 101], 0.25, 0.55);
+    // Zygomatic shelf — right
+    drawChain(const [454, 447, 345, 352, 346, 347, 330], 0.25, 0.55);
+
+    // Orbital frame — left eye socket outline
+    drawChain(const [
+      33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7, 33,
+    ], 0.40, 0.70, width: 1.0, alpha: 0.75);
+    // Orbital frame — right eye socket outline
+    drawChain(const [
+      263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249, 263,
+    ], 0.40, 0.70, width: 1.0, alpha: 0.75);
+
+    // Frontal bone sweep (brow-to-brow arc)
+    drawChain(const [70, 63, 105, 66, 107, 9, 336, 296, 334, 293, 300],
+        0.55, 0.80, width: 1.1);
+
+    // Nose bridge (vertical axis)
+    drawChain(const [168, 6, 197, 195, 5, 4, 1], 0.60, 0.85, width: 1.1);
+
+    // Chin projection vector (mental tubercle)
+    drawChain(const [152, 175, 199, 200, 18], 0.70, 0.92, width: 1.3);
+
+    // Final lockup: hairline anchors drawn as discrete gold pips
+    final hairPoints = const [10, 109, 67, 103, 54, 21, 162, 127, 356, 389, 251, 284, 332, 297, 338];
+    if (reveal > 0.85) {
+      final anchorPaint = Paint()
+        ..color = _boneColor.withValues(alpha: 0.85 * ((reveal - 0.85) / 0.15))
+        ..style = PaintingStyle.fill;
+      for (final i in hairPoints) {
+        final p = px(i);
+        if (p != null) canvas.drawCircle(p, 1.8, anchorPaint);
+      }
     }
   }
 

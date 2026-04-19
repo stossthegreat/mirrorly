@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:go_router/go_router.dart';
 import '../models/face_geometry.dart';
+import '../screens/chat/chat_screen.dart';
 import '../screens/scan/scan_screen.dart';
 import '../screens/report/report_screen.dart';
 import '../screens/settings/settings_screen.dart';
@@ -28,6 +29,15 @@ final appRouter = GoRouter(
         return ReportScreen(
           imageBytes: extra['imageBytes'] as Uint8List,
           geometry:   extra['geometry']   as FaceGeometry,
+        );
+      },
+    ),
+    GoRoute(
+      path: '/chat',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>;
+        return ChatScreen(
+          geometry: extra['geometry'] as FaceGeometry,
         );
       },
     ),
