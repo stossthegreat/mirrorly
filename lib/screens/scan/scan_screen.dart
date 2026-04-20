@@ -81,6 +81,11 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
   int _fallbackHit = 0;
   int _lastMeshPts = 0;
   String _pipelineErr = '';
+  // Camera intake diagnostics — planes and raw format as delivered by the
+  // camera plugin. Lets us verify on-device whether Android is actually
+  // getting YUV_420_888 (3 planes) or some surprise layout.
+  int _lastPlanes = 0;
+  int _lastRawFmt = 0;
 
   // 60fps animation clock — drives particle drift, scan sweep, radar rings,
   // pulse, glitch cadence. Monotonic seconds since screen init.
@@ -142,18 +147,23 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     // guarantees parity: whatever iOS shows, Android now shows too.
     _meshService = null;
 
-    // Canonical Flutter + ML Kit setup — per google_mlkit_commons README:
-    //   Android → NV21 (natively delivered by camera 0.10.5+, no conversion)
-    //   iOS     → BGRA8888 (bytes accepted directly by ML Kit)
-    // Manual YUV420→NV21 conversion has stride bugs on high-res Pixel/Samsung
-    // modes (uvRow > w/2 * uvPx) which silently produces garbage and makes
-    // the detector return zero faces. Don't roll your own.
+    // Flutter + ML Kit camera setup:
+    //   Android → YUV_420_888 (Android-native, always reliably delivered)
+    //   iOS     → BGRA8888    (bytes accepted directly by ML Kit)
+    //
+    // We previously asked the camera plugin to deliver NV21 on Android, but
+    // camera 0.10.5+5's internal YUV→NV21 conversion silently drops to a
+    // Y-only plane on several devices (Pixels, certain Samsungs), which makes
+    // ML Kit see a grayscale buffer and return zero faces. That's why Android
+    // went black. Now we ask for YUV_420_888 (what the hardware actually
+    // produces) and build the NV21 buffer ourselves with proper stride +
+    // pixel-stride handling — see _yuv420ToNv21 below.
     _camera = CameraController(
       front,
       ResolutionPreset.high,
       enableAudio: false,
       imageFormatGroup: Platform.isAndroid
-          ? ImageFormatGroup.nv21
+          ? ImageFormatGroup.yuv420
           : ImageFormatGroup.bgra8888,
     );
 
@@ -167,11 +177,11 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     }
   }
 
-  // Canonical single-plane InputImage — per google_ml_kit_flutter sample
-  // (packages/example/lib/vision_detector_views/camera_view.dart). With the
-  // camera plugin configured to deliver NV21 on Android and BGRA on iOS, we
-  // just forward the first plane to ML Kit verbatim. No conversion, no stride
-  // handling, no manual byte shuffling.
+  // iOS: single BGRA8888 plane — forward verbatim.
+  // Android: the camera delivers 3 planes of YUV_420_888 (Y, U, V) with
+  // per-plane row strides and, for U/V, a pixel stride that's often 2
+  // (semi-planar). ML Kit only accepts NV21 (Y plane followed by interleaved
+  // VU pairs), so we build that buffer here with strict stride handling.
   InputImage? _buildInputImage(CameraImage image) {
     final camera = _camera;
     if (camera == null) return null;
@@ -183,18 +193,92 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
         : (InputImageRotationValue.fromRawValue(camera.description.sensorOrientation)
               ?? InputImageRotation.rotation270deg);
 
-    final plane = image.planes.first;
+    if (Platform.isIOS) {
+      final plane = image.planes.first;
+      return InputImage.fromBytes(
+        bytes: plane.bytes,
+        metadata: InputImageMetadata(
+          size: Size(image.width.toDouble(), image.height.toDouble()),
+          rotation: rotation,
+          format: InputImageFormat.bgra8888,
+          bytesPerRow: plane.bytesPerRow,
+        ),
+      );
+    }
+
+    // Android path. If for any reason the camera delivered a single plane
+    // already (legacy NV21 behaviour), pass it through; otherwise convert.
+    final Uint8List nv21Bytes = image.planes.length == 1
+        ? image.planes.first.bytes
+        : _yuv420ToNv21(image);
+
     return InputImage.fromBytes(
-      bytes: plane.bytes,
+      bytes: nv21Bytes,
       metadata: InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
         rotation: rotation,
-        format: Platform.isAndroid
-            ? InputImageFormat.nv21
-            : InputImageFormat.bgra8888,
-        bytesPerRow: plane.bytesPerRow,
+        format: InputImageFormat.nv21,
+        bytesPerRow: image.width, // NV21 Y stride = image width
       ),
     );
+  }
+
+  // YUV_420_888 → NV21 with correct stride/pixel-stride handling.
+  //
+  // Naive implementations break on devices where the U/V planes are
+  // semi-planar (pixelStride == 2) or where rowStride > width. Both
+  // happen on Pixel, Samsung S2x, and most modern Qualcomm camera HALs.
+  // We walk the planes row-by-row and pixel-by-pixel using the reported
+  // strides so the output is byte-accurate regardless of the source layout.
+  Uint8List _yuv420ToNv21(CameraImage image) {
+    final int width  = image.width;
+    final int height = image.height;
+    final int ySize  = width * height;
+    final int uvSize = width * height ~/ 2;
+    final Uint8List out = Uint8List(ySize + uvSize);
+
+    final yPlane = image.planes[0];
+    final uPlane = image.planes[1];
+    final vPlane = image.planes[2];
+
+    // Y plane: strip row padding, pack width bytes per row.
+    final int yRowStride = yPlane.bytesPerRow;
+    int dst = 0;
+    if (yRowStride == width) {
+      out.setRange(0, ySize, yPlane.bytes);
+      dst = ySize;
+    } else {
+      for (int row = 0; row < height; row++) {
+        final int src = row * yRowStride;
+        out.setRange(dst, dst + width, yPlane.bytes, src);
+        dst += width;
+      }
+    }
+
+    // UV planes: interleave V then U (NV21 order: Y..Y V U V U ...).
+    final int uvWidth  = width  ~/ 2;
+    final int uvHeight = height ~/ 2;
+    final int uRowStride   = uPlane.bytesPerRow;
+    final int vRowStride   = vPlane.bytesPerRow;
+    final int uPixelStride = uPlane.bytesPerPixel ?? 1;
+    final int vPixelStride = vPlane.bytesPerPixel ?? 1;
+    final uBytes = uPlane.bytes;
+    final vBytes = vPlane.bytes;
+    final int uLen = uBytes.length;
+    final int vLen = vBytes.length;
+
+    for (int row = 0; row < uvHeight; row++) {
+      int uPos = row * uRowStride;
+      int vPos = row * vRowStride;
+      for (int col = 0; col < uvWidth; col++) {
+        // Guard against short tails on the last row (some HALs omit a byte).
+        out[dst++] = vPos < vLen ? vBytes[vPos] : 128;
+        out[dst++] = uPos < uLen ? uBytes[uPos] : 128;
+        uPos += uPixelStride;
+        vPos += vPixelStride;
+      }
+    }
+    return out;
   }
 
   // Canonical coordinate translator — ported from the official Flutter ML Kit
@@ -236,6 +320,8 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
 
     try {
       _framesTotal++;
+      _lastPlanes = image.planes.length;
+      _lastRawFmt = image.format.raw;
       final inputImage = _buildInputImage(image);
       if (inputImage == null) return;
 
@@ -720,6 +806,12 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
           Text(
             'FR $_framesTotal   FC $_facesHit   MS $_meshHit   FB $_fallbackHit   PTS $_lastMeshPts',
             style: const TextStyle(color: Colors.white, fontSize: 9,
+              fontWeight: FontWeight.w600, letterSpacing: 0.6, height: 1.3,
+              fontFamilyFallback: ['monospace'])),
+          const SizedBox(height: 3),
+          Text(
+            'PLANES $_lastPlanes   FMT $_lastRawFmt',
+            style: const TextStyle(color: Colors.white70, fontSize: 9,
               fontWeight: FontWeight.w600, letterSpacing: 0.6, height: 1.3,
               fontFamilyFallback: ['monospace'])),
           if (_pipelineErr.isNotEmpty) ...[
