@@ -87,6 +87,9 @@ function buildPrompt({ styleRequest, category, anchors }) {
 
 This should feel like the person had a great salon / barber / stylist visit and is now back home, well-rested, in flattering natural light. Same face. Same identity. Same age. BETTER presentation.
 
+## CORE RULE — LIGHTING OVER MORPHING
+The lift must come from grooming, lighting, and shadow work — NEVER from morphing bone structure or altering facial geometry. Success test: the user must say "that's literally me, just better" — not "that's AI."
+
 ${guidance}
 ${geoBlock}${beardNote}
 IDENTITY — preserve at pixel level:

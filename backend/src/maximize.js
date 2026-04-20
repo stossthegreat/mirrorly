@@ -90,6 +90,44 @@ function buildPrompt({ anchors, improve, preserve }) {
 
   return `Produce the BEST-looking version of the SAME person in this photo. Not a filter. Not a different person. The same exact human — but visibly BETTER than the source image. Significantly better. If the output doesn't look distinctly more attractive than the input, the render has failed.
 
+## THE CORE RULE — LIGHTING OVER MORPHING
+
+The entire lift must come from:
+- Better lighting (soft warm daylight, flattering contours)
+- Clean skin (even tone, reduced texture WITHOUT plastic blur)
+- Tidy grooming (neat hair, shaped brows, trimmed beard if present)
+- Subtle shadow work (under-jaw contour, upper-lid depth)
+
+The lift MUST NOT come from:
+- Enlarging eyes
+- Narrowing nose
+- Sharpening bone structure
+- Reshaping lips
+- Any morphing of facial geometry
+
+Lighting and grooming can create the PERCEPTION of sharper features without altering the underlying identity. That is the only allowed path.
+
+## PER-FEATURE VISUAL RULES
+
+EYES: slight contrast increase around eyes, deepened upper-lid shadow, darker lash line, reduced under-eye dullness. DO NOT enlarge eyes. DO NOT make them glossy.
+
+JAW: tightened beard edges if beard present, reduced beard bulk, subtle shadow under jawline, slight contrast between neck and jaw. DO NOT morph bone structure.
+
+FACE BALANCE: slightly darken lower third if long-lower, add hair volume on top if needed. DO NOT stretch or compress face geometry.
+
+HAIR: slight volume at top, defined direction, darkened roots for density. DO NOT change hairstyle radically. DO NOT add unrealistic hair.
+
+SKIN: reduce harsh texture slightly, even tone subtly, KEEP PORES VISIBLE. DO NOT blur. DO NOT remove all imperfections. Target: "healthier, not edited."
+
+SYMMETRY: micro-adjust alignment only — barely visible. DO NOT mirror face. DO NOT make it uncanny.
+
+LIPS: slight tone balance, subtle edge clarity. DO NOT increase size. DO NOT change shape.
+
+## STACKING RULE
+
+When multiple fixes are applied together, BLEND them at ~70% strength each instead of 100%. Stacking at full intensity breaks realism.
+
+
 Imagine this person: walked out of a top salon, two weeks of great sleep, a clean skincare routine on week six, shot by an editorial portrait photographer in golden-hour window light. That is your target output. Same face — but the obvious visual improvement a viewer would notice immediately.
 
 This is NOT cosmetic surgery. NOT altered bone structure. NOT a filter look. It is the person at the absolute peak of what is achievable through grooming, skincare, lighting, hair, and health — applied maximally.

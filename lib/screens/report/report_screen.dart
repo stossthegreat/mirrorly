@@ -1,5 +1,5 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,6 +8,7 @@ import '../../models/mirror_analysis.dart';
 import '../../models/scan_record.dart';
 import '../../services/archetype_service.dart';
 import '../../services/face_asset_service.dart';
+import '../../services/feature_analysis_service.dart';
 import '../../services/local_store_service.dart';
 import '../../services/mirror_api_service.dart';
 import '../../services/scoring_service.dart';
@@ -19,7 +20,8 @@ import '../../widgets/common/before_after_card.dart';
 import '../../widgets/common/fullscreen_image.dart';
 import '../../widgets/common/quick_tryon_chips.dart';
 import '../../widgets/report/archetype_card.dart';
-import '../../widgets/report/measurement_grid.dart';
+import '../../widgets/report/feature_grid.dart';
+import '../../widgets/report/hidden_depth_panel.dart';
 import '../../widgets/report/score_card.dart';
 import '../../widgets/report/verdict_card.dart';
 
@@ -251,18 +253,44 @@ class _ReportScreenState extends State<ReportScreen> {
 
           const SizedBox(height: Sp.md),
 
-          // ── Maximized Twin · NOW vs MAXIMIZED · tappable, caption-worthy ─
+          // ── HERO BEFORE/AFTER with "APPLY ALL FIXES" overlay ───────────
           BeforeAfterCard(
             beforeBytes: widget.imageBytes,
             afterUrl:    a.maximizedImageUrl,
-            caption:     a.report.oneLineVerdict.isNotEmpty
-                ? null
-                : 'You, with skin, light, and grooming pushed to their best.',
+            caption:     'YOU · MAXIMIZED',
           ).animate().fadeIn(delay: 240.ms, duration: 600.ms),
 
           const SizedBox(height: Sp.md),
 
-          // ── Quick-action chips — fires tryon on tap ─────────────────────
+          // ── APPLY ALL FIXES — the primary CTA (final form unlocked) ────
+          _ApplyAllFixesButton(
+            maximizedImageUrl: a.maximizedImageUrl,
+          ).animate().fadeIn(delay: 340.ms, duration: 500.ms),
+
+          const SizedBox(height: Sp.xl),
+
+          // ── FEATURE GRID — the addictive part ──────────────────────────
+          FeatureGrid(
+            reads: FeatureAnalysisService.analyse(widget.geometry),
+            onSeeIt: (read) => context.push(
+              '/chat',
+              extra: {
+                'geometry':  widget.geometry,
+                'imagePath': _savedImagePath,
+                'autoSend':  read.tryonPrompt,
+              },
+            ),
+          ).animate().fadeIn(delay: 440.ms, duration: 500.ms),
+
+          const SizedBox(height: Sp.xl),
+
+          // ── Archetype match ─────────────────────────────────────────────
+          ArchetypeCard(match: match)
+            .animate().fadeIn(delay: 560.ms, duration: 500.ms),
+
+          const SizedBox(height: Sp.md),
+
+          // ── Quick-action tryon chips ────────────────────────────────────
           Text('TRY IT ON YOUR FACE',
             style: AppTypography.label.copyWith(
               color: AppColors.gold, letterSpacing: 2.5, fontSize: 9)),
@@ -277,29 +305,23 @@ class _ReportScreenState extends State<ReportScreen> {
                 'autoSend':  style,
               },
             ),
-          ).animate().fadeIn(delay: 360.ms, duration: 500.ms),
+          ).animate().fadeIn(delay: 620.ms, duration: 500.ms),
 
           const SizedBox(height: Sp.md),
 
-          // ── Measurement grid — the precision proof ──────────────────────
-          MeasurementGrid(g: widget.geometry)
-            .animate().fadeIn(delay: 420.ms, duration: 500.ms),
-
-          const SizedBox(height: Sp.md),
-
-          // ── Archetype match ─────────────────────────────────────────────
-          ArchetypeCard(match: match)
-            .animate().fadeIn(delay: 520.ms, duration: 500.ms),
-
-          const SizedBox(height: Sp.md),
-
-          // ── Consultation CTA — sends into face-aware chat ───────────────
+          // ── Consultation CTA ────────────────────────────────────────────
           _ConsultCard(
             onTap: () => context.push(
               '/chat',
               extra: {'geometry': widget.geometry, 'imagePath': _savedImagePath},
             ),
-          ).animate().fadeIn(delay: 620.ms, duration: 500.ms),
+          ).animate().fadeIn(delay: 720.ms, duration: 500.ms),
+
+          const SizedBox(height: Sp.xl),
+
+          // ── HIDDEN DEPTH — collapsed, for nerds / credibility ──────────
+          HiddenDepthPanel(geometry: widget.geometry)
+            .animate().fadeIn(delay: 820.ms, duration: 500.ms),
 
           const SizedBox(height: Sp.xl),
 
@@ -309,39 +331,38 @@ class _ReportScreenState extends State<ReportScreen> {
               label: 'THE READ',
               color: AppColors.measure,
               body: a.report.boneReading,
-            ).animate().fadeIn(delay: 780.ms),
+            ).animate().fadeIn(delay: 920.ms),
             const SizedBox(height: Sp.md),
           ],
 
-          // Strongest trait
+          // GPT-generated strongest + pulldown (kept as supplementary colour)
           _Block(
             label: 'WHAT\'S ALREADY WORKING',
             color: AppColors.signalGreen,
             body: a.report.strongest,
-          ).animate().fadeIn(delay: 860.ms),
+          ).animate().fadeIn(delay: 1020.ms),
 
           const SizedBox(height: Sp.md),
 
-          // The pull-down
           _Block(
             label: 'WHAT\'S HOLDING IT BACK',
             color: AppColors.signalRed,
             body: a.report.pulldown,
-          ).animate().fadeIn(delay: 960.ms),
+          ).animate().fadeIn(delay: 1120.ms),
 
           const SizedBox(height: Sp.xl),
 
-          // Fixes
-          Text('FIXES — ORDERED BY LEVERAGE', style: AppTypography.label.copyWith(
-            color: AppColors.accent, letterSpacing: 2.0))
-            .animate().fadeIn(delay: 1080.ms),
+          // Fixes from GPT (ordered by leverage) — these pair with the
+          // feature grid but come from GPT's visual read not our geometry
+          Text('GPT FIXES — ORDERED BY LEVERAGE', style: AppTypography.label.copyWith(
+            color: AppColors.accent, letterSpacing: 2.0)),
           const SizedBox(height: Sp.sm),
           ...a.report.fixes.asMap().entries.map((e) =>
             _FixCard(
               index: e.key + 1, fix: e.value,
               capturedBytes: widget.imageBytes,
               geometry:      widget.geometry,
-            ).animate().fadeIn(delay: Duration(milliseconds: 1140 + e.key * 100))),
+            ).animate().fadeIn(delay: Duration(milliseconds: 1240 + e.key * 100))),
 
           const SizedBox(height: Sp.xl),
 
@@ -403,6 +424,120 @@ class _ReportScreenState extends State<ReportScreen> {
 }
 
 // ── Consultation CTA card ────────────────────────────────────────────────────
+// ── APPLY ALL FIXES — the primary transformation moment ─────────────────────
+class _ApplyAllFixesButton extends StatefulWidget {
+  final String maximizedImageUrl;
+  const _ApplyAllFixesButton({required this.maximizedImageUrl});
+
+  @override
+  State<_ApplyAllFixesButton> createState() => _ApplyAllFixesButtonState();
+}
+
+class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
+  bool _applied = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_applied) {
+      // Final form unlocked — the maximized twin blown up, with glow
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(Sp.md),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.gold.withValues(alpha: 0.24),
+              AppColors.gold.withValues(alpha: 0.08),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(Rd.xl),
+          border: Border.all(color: AppColors.gold, width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.gold.withValues(alpha: 0.3),
+              blurRadius: 36, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('◆ FINAL FORM UNLOCKED',
+              style: AppTypography.label.copyWith(
+                color: AppColors.gold, letterSpacing: 3.2, fontSize: 10,
+                fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(Rd.lg),
+              child: AspectRatio(
+                aspectRatio: 3 / 4,
+                child: GestureDetector(
+                  onTap: () => FullscreenImage.open(context,
+                    url: widget.maximizedImageUrl, caption: 'MAXIMIZED · you, applied'),
+                  child: widget.maximizedImageUrl.isNotEmpty
+                      ? Image.network(widget.maximizedImageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _errorBox())
+                      : _errorBox(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text('Tap to open fullscreen · share · screenshot',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary, fontSize: 11,
+                fontStyle: FontStyle.italic)),
+          ],
+        ),
+      ).animate()
+        .fadeIn(duration: 450.ms)
+        .scale(begin: const Offset(0.92, 0.92), end: const Offset(1, 1),
+            duration: 450.ms, curve: Curves.easeOutBack);
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.heavyImpact();
+          setState(() => _applied = true);
+        },
+        borderRadius: BorderRadius.circular(Rd.lg),
+        child: Container(
+          width: double.infinity, height: 58,
+          decoration: BoxDecoration(
+            color: AppColors.gold,
+            borderRadius: BorderRadius.circular(Rd.lg),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.gold.withValues(alpha: 0.45),
+                blurRadius: 22, offset: const Offset(0, 6)),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.auto_awesome,
+                size: 18, color: AppColors.base),
+              const SizedBox(width: 10),
+              Text('APPLY ALL FIXES',
+                style: AppTypography.label.copyWith(
+                  color: AppColors.base, letterSpacing: 3.0, fontSize: 13,
+                  fontWeight: FontWeight.w900)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _errorBox() => Container(
+    color: AppColors.surface1,
+    alignment: Alignment.center,
+    child: Text('Maximized render unavailable',
+      style: AppTypography.bodySmall.copyWith(color: AppColors.textMuted)),
+  );
+}
+
 class _ConsultCard extends StatelessWidget {
   final VoidCallback onTap;
   const _ConsultCard({required this.onTap});
