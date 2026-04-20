@@ -207,34 +207,40 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
   // extra flip. 0°/180° is the only case where we mirror explicitly for front.
   //
   // Returns normalized 0..1 display-space coordinates for the portrait preview.
-  /// Coordinate translator.
+  /// Coordinate translator — ported from the fitness-app SkeletonPainter.
   ///
-  /// Rule (ported from the working fitness-app SkeletonPainter):
-  /// - ANDROID: sensor delivers unmirrored frames; preview plugin mirrors.
-  ///   → We mirror the X for front cam. Rotation 270° bakes swap of dims.
-  /// - iOS: AVCaptureVideoPreviewLayer auto-mirrors the front-cam preview
-  ///   at the SYSTEM level, and ML Kit output already matches that mirrored
-  ///   space. → We MUST NOT mirror in code (double-mirror = opposite movement).
-  ///   The sensor reports landscape dimensions even in portrait, so swap
-  ///   imgW/imgH in the division.
+  /// ANDROID — ML Kit returns landmarks in the unrotated SENSOR frame.
+  ///   Divide by sensor dims (imgW/imgH) directly. Mirror X for front cam
+  ///   because the preview is mirrored by the plugin while the stream isn't.
+  ///
+  /// iOS — AVCaptureVideoPreviewLayer auto-mirrors the front-cam preview
+  ///   at the SYSTEM level, and ML Kit's iOS path outputs in the same
+  ///   mirrored space. The sensor reports landscape dims even in portrait,
+  ///   so swap the division. NO explicit mirror — system handles it.
   Offset _normalize(double bx, double by, double imgW, double imgH) {
     final isIOS = Platform.isIOS;
     double nx, ny;
-    switch (_rotation) {
-      case InputImageRotation.rotation90deg:
-      case InputImageRotation.rotation270deg:
-        // Both platforms: swap dims (sensor landscape → display portrait)
-        nx = bx / imgH;
-        ny = by / imgW;
-        // Android only — iOS system mirror handles this for us
-        if (!isIOS && _isFrontCam) nx = 1.0 - nx;
-        break;
-      case InputImageRotation.rotation0deg:
-      case InputImageRotation.rotation180deg:
-        nx = bx / imgW;
-        ny = by / imgH;
-        if (!isIOS && _isFrontCam) nx = 1.0 - nx;
-        break;
+    if (isIOS) {
+      // iOS: swap dims for portrait rotation; no mirror (system handles it)
+      switch (_rotation) {
+        case InputImageRotation.rotation90deg:
+        case InputImageRotation.rotation270deg:
+          nx = bx / imgH;
+          ny = by / imgW;
+          break;
+        case InputImageRotation.rotation0deg:
+        case InputImageRotation.rotation180deg:
+          nx = bx / imgW;
+          ny = by / imgH;
+          break;
+      }
+    } else {
+      // Android: sensor-frame dims directly, mirror for front cam.
+      // This is the fitness-app SkeletonPainter pattern that runs in
+      // production on thousands of Android devices.
+      nx = bx / imgW;
+      ny = by / imgH;
+      if (_isFrontCam) nx = 1.0 - nx;
     }
     return Offset(nx, ny);
   }

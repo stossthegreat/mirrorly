@@ -6,10 +6,13 @@ import 'package:go_router/go_router.dart';
 import '../../models/face_geometry.dart';
 import '../../services/archetype_service.dart';
 import '../../services/chat_service.dart';
+import '../../services/face_asset_service.dart';
 import '../../services/scoring_service.dart';
+import '../../services/share_service.dart';
+import '../../services/trait_builder_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
-import '../../widgets/common/fullscreen_image.dart';
+import '../../widgets/common/before_after_card.dart';
 import '../../widgets/common/quick_tryon_chips.dart';
 
 /// Face-aware advisor chat. Text replies + inline Flux Kontext renders
@@ -46,17 +49,44 @@ class _ChatScreenState extends State<ChatScreen> {
   late final AestheticScore _score;
   late final ArchetypeMatch _match;
 
+  /// User's scan image bytes, loaded once from disk. Needed to render the
+  /// big before/after card inline whenever the advisor triggers a Flux
+  /// render. This is the retention loop — every chat turn that produces a
+  /// visual becomes a shareable before/after moment.
+  Uint8List? _scanBytes;
+
   @override
   void initState() {
     super.initState();
     _score = ScoringService.compute(widget.geometry);
     _match = ArchetypeService.bestMatch(widget.geometry);
     _messages.add(ChatMessage(ChatRole.assistant, _openingLine()));
+    _loadScanBytes();
     if (widget.autoSend != null && widget.autoSend!.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _send(widget.autoSend!);
       });
     }
+  }
+
+  Future<void> _loadScanBytes() async {
+    if (widget.imagePath == null) return;
+    final bytes = await FaceAssetService.loadScanImageBytes(widget.imagePath!);
+    if (!mounted) return;
+    setState(() => _scanBytes = bytes);
+  }
+
+  int _percentile(int s) {
+    if (s >= 92) return 2;
+    if (s >= 85) return 8;
+    if (s >= 78) return 16;
+    if (s >= 70) return 28;
+    if (s >= 60) return 44;
+    return 62;
+  }
+  int _potentialDelta(int s) {
+    final headroom = (100 - s).clamp(0, 40);
+    return (headroom * 0.55).round();
   }
 
   String _openingLine() {
@@ -133,8 +163,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   if (i == _messages.length) return const _TypingIndicator();
                   final m = _messages[i];
                   return _MessageBubble(
-                    message: m,
-                    isFirst: i == 0 && m.role == ChatRole.assistant,
+                    message:        m,
+                    isFirst:        i == 0 && m.role == ChatRole.assistant,
+                    scanBytes:      _scanBytes,
+                    score:          _score,
+                    match:          _match,
+                    percentile:     _percentile(_score.value),
+                    potentialDelta: _potentialDelta(_score.value),
+                    traits:         TraitBuilderService.build(widget.geometry),
                   );
                 },
               ),
@@ -299,7 +335,24 @@ class _ChatScreenState extends State<ChatScreen> {
 class _MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isFirst;
-  const _MessageBubble({required this.message, this.isFirst = false});
+  // Share-card context — passed down so inline before/after can fire share.
+  final Uint8List? scanBytes;
+  final AestheticScore score;
+  final ArchetypeMatch match;
+  final int percentile;
+  final int potentialDelta;
+  final List<Trait> traits;
+
+  const _MessageBubble({
+    required this.message,
+    required this.score,
+    required this.match,
+    required this.percentile,
+    required this.potentialDelta,
+    required this.traits,
+    this.scanBytes,
+    this.isFirst = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -351,12 +404,22 @@ class _MessageBubble extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Inline Flux render attached to an assistant reply
+                // Inline BIG before/after — the retention loop. Every time
+                // the advisor fires a Flux render, user gets a shareable
+                // before/after card + one-tap share button.
                 if (!isUser && message.imageUrl != null) ...[
-                  const SizedBox(height: 10),
-                  _InlineRender(
-                    url:     message.imageUrl!,
-                    caption: message.imageCaption),
+                  const SizedBox(height: 12),
+                  _InlineBeforeAfter(
+                    beforeBytes:    scanBytes,
+                    afterUrl:       message.imageUrl!,
+                    caption:        message.imageCaption,
+                    score:          score.value,
+                    tier:           score.tierLabel,
+                    archetype:      match.archetype.name,
+                    percentile:     percentile,
+                    potentialDelta: potentialDelta,
+                    traits:         traits,
+                  ),
                 ],
               ],
             ).animate().fadeIn(duration: 260.ms).slideY(
@@ -382,81 +445,85 @@ class _MessageBubble extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  Inline Flux render — shown under assistant messages when a tryon fired
+//  Inline BIG before/after — fires under any assistant reply that carries
+//  a Flux tryon URL. This is the retention loop: every visual answer is a
+//  shareable transformation moment, not just a static image.
 // ═══════════════════════════════════════════════════════════════════════════
-class _InlineRender extends StatelessWidget {
-  final String url;
+class _InlineBeforeAfter extends StatelessWidget {
+  final Uint8List? beforeBytes;
+  final String afterUrl;
   final String? caption;
-  const _InlineRender({required this.url, this.caption});
+  final int score;
+  final String tier;
+  final String archetype;
+  final int percentile;
+  final int potentialDelta;
+  final List<Trait> traits;
+
+  const _InlineBeforeAfter({
+    required this.beforeBytes,
+    required this.afterUrl,
+    required this.score,
+    required this.tier,
+    required this.archetype,
+    required this.percentile,
+    required this.potentialDelta,
+    required this.traits,
+    this.caption,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => FullscreenImage.open(context, url: url, caption: caption),
-        borderRadius: BorderRadius.circular(Rd.lg),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 260),
-          child: AspectRatio(
-            aspectRatio: 3 / 4,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(Rd.lg),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  DecoratedBox(
-                    decoration: BoxDecoration(color: AppColors.surface1)),
-                  Image.network(url, fit: BoxFit.cover,
-                    loadingBuilder: (_, child, p) => p == null ? child
-                      : const Center(child: SizedBox(width: 20, height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.8, color: AppColors.gold))),
-                    errorBuilder: (_, __, ___) => Center(
-                      child: Icon(Icons.broken_image_rounded,
-                        color: AppColors.textMuted, size: 24))),
-                  // Caption pill
-                  if (caption != null)
-                    Positioned(
-                      left: 0, right: 0, bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(10, 20, 10, 8),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.85),
-                            ],
-                          ),
-                        ),
-                        child: Text(caption!,
-                          maxLines: 2, overflow: TextOverflow.ellipsis,
-                          style: AppTypography.label.copyWith(
-                            color: AppColors.gold,
-                            fontSize: 9, letterSpacing: 1.8)),
-                      ),
-                    ),
-                  // Zoom hint
-                  Positioned(
-                    top: 8, right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.zoom_in_rounded,
-                        size: 14, color: Colors.white),
-                    ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        BeforeAfterCard(
+          beforeBytes:    beforeBytes,
+          afterUrl:       afterUrl,
+          caption:        caption,
+          beforeLabel:    'NOW',
+          afterLabel:     'AFTER',
+          potentialDelta: null, // no potential chip in chat context
+        ),
+        const SizedBox(height: 8),
+        // Share CTA — one tap, same composed share card as the report,
+        // with the NEW tryon render as the "maxed" side
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 40,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: AppColors.gold.withValues(alpha: 0.65)),
+                    foregroundColor: AppColors.gold,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(Rd.md)),
                   ),
-                ],
+                  onPressed: () => ShareService.shareComposed(
+                    context:        context,
+                    beforeBytes:    beforeBytes,
+                    afterUrl:       afterUrl,
+                    score:          score,
+                    tier:           tier,
+                    archetype:      archetype,
+                    verdict:        caption ?? '',
+                    percentile:     percentile,
+                    potentialDelta: potentialDelta,
+                    traits:         traits,
+                    text: 'Me vs me maxed — $score/$archetype via Mirrorly',
+                  ),
+                  icon: const Icon(Icons.ios_share_rounded, size: 14),
+                  label: Text('SHARE',
+                    style: AppTypography.label.copyWith(
+                      color: AppColors.gold, letterSpacing: 2.0,
+                      fontSize: 10, fontWeight: FontWeight.w900)),
+                ),
               ),
             ),
-          ),
+          ],
         ),
-      ),
+      ],
     );
   }
 }
