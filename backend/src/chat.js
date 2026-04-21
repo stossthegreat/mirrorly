@@ -124,7 +124,7 @@ Example — user says "what would suit me":
 
 {
   "reply":          "<2–5 sentences. Direct. Cites their specific measurement.>",
-  "style_request":  "<optional, 6–14 words describing the VISUAL outcome on the face. NEVER product names, dosages, routines, timelines, or verbs like 'apply/take/use' — a text-to-image model renders those literally (cream on the face, pills in the shot). Good: 'short squared beard trimmed high on the cheek, tight neckline'. Bad: 'trim your beard every 3 days with a 5mm guard'.>",
+  "style_request":  "<optional, 6–14 words describing the VISUAL outcome on the face. ONE ZONE ONLY — hair OR beard OR skin OR brows OR glasses, never a combination. NEVER product names, dosages, routines, timelines, or verbs like 'apply/take/use' — a text-to-image model renders those literally (cream on the face, pills in the shot). Good: 'short squared beard trimmed high on the cheek, tight neckline' (one zone). Bad: 'trim your beard every 3 days with a 5mm guard' (protocol). Bad: 'short fade and clean skin' (two zones).>",
   "category":       "<optional — haircut|beard|hair_color|glasses|facial_hair|weight>"
 }`;
 

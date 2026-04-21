@@ -941,12 +941,21 @@ class _FixCardState extends State<_FixCard> {
 
   String _guessCategory(String title, String action) {
     final t = '$title $action'.toLowerCase();
-    if (RegExp(r'\b(hair|fade|crop|cut|fringe|undercut|buzz|trim|taper)\b').hasMatch(t)) return 'haircut';
-    if (RegExp(r'\b(beard|stubble|facial hair|goatee|mustache)\b').hasMatch(t))          return 'beard';
-    if (RegExp(r'\b(glasses|frame|eyewear|specs)\b').hasMatch(t))                         return 'glasses';
-    if (RegExp(r'\b(lean|cut|body|weight|fat|recomp)\b').hasMatch(t))                     return 'weight';
-    if (RegExp(r'\b(color|dye|tint)\b').hasMatch(t))                                      return 'hair_color';
-    return 'haircut';
+    // Order matters — beard/facial-hair keywords often also contain "hair"
+    // ("facial hair"), so check beard first before the haircut regex.
+    if (RegExp(r'\b(beard|stubble|facial hair|goatee|mustache|moustache)\b').hasMatch(t)) return 'beard';
+    if (RegExp(r'\b(brow|eyebrow|browline)\b').hasMatch(t))                               return 'eyebrow';
+    if (RegExp(r'\b(glasses|frame|eyewear|specs)\b').hasMatch(t))                          return 'glasses';
+    if (RegExp(r'\b(skin|acne|pore|texture|tone|retinol|tret|cream|sunscreen|glow|blemish|dark circle|under-eye)\b').hasMatch(t)) return 'skin';
+    if (RegExp(r'\b(teeth|tooth|whiten|bleach|smile)\b').hasMatch(t))                      return 'teeth';
+    if (RegExp(r'\b(color|dye|tint|bleach|highlight)\b').hasMatch(t))                      return 'hair_color';
+    if (RegExp(r'\b(lean|cut|body|weight|fat|recomp|bulk)\b').hasMatch(t))                 return 'weight';
+    if (RegExp(r'\b(hair|fade|crop|cut|fringe|undercut|buzz|trim|taper|hairstyle)\b').hasMatch(t)) return 'haircut';
+    // Fallback: 'generic' (not 'haircut'). A generic fix gets a conservative
+    // preservation clause in tryon.js that locks every feature — safer than
+    // accidentally classifying a jaw-exercise fix as a haircut and shaving
+    // the user's head.
+    return 'generic';
   }
 
   @override
