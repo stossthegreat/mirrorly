@@ -190,14 +190,14 @@ class _RenderingOverlay extends StatelessWidget {
           color: AppColors.surface1,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: AppColors.gold.withValues(alpha: 0.35), width: 0.8),
+            color: AppColors.red.withValues(alpha: 0.35), width: 0.8),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: const [
             SizedBox(width: 22, height: 22,
               child: CircularProgressIndicator(
-                color: AppColors.gold, strokeWidth: 2)),
+                color: AppColors.red, strokeWidth: 2)),
             SizedBox(width: 16),
             Text('Composing your card…',
               style: TextStyle(

@@ -21,9 +21,13 @@ abstract final class AppColors {
   static const measureDim = Color(0xFF0EA5E9);
   static const measureGlow = Color(0x3338BDF8);
 
-  // ── Gold — earned achievements / premium ─────────────────────────────────
-  static const gold       = Color(0xFFD4A96A);
-  static const goldDim    = Color(0xFF9E7A3A);
+  // ── Red — primary brand accent (replaced gold). Saturated cinnabar — the
+  // same red the share-card and result hero numbers already use; promoted to
+  // the app-wide secondary color so the palette reads as one consistent voice
+  // (black + white + red) across every surface.
+  static const red        = Color(0xFFE8222A);
+  static const redDim     = Color(0xFFA61419);
+  static const redGlow    = Color(0x33E8222A);
 
   // ── Text (high-contrast editorial) ───────────────────────────────────────
   static const textPrimary   = Color(0xFFF7F7F9);

@@ -225,7 +225,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     Container(
                       width: 4, height: 4, margin: const EdgeInsets.only(top: 6),
                       decoration: const BoxDecoration(
-                        color: AppColors.gold, shape: BoxShape.circle),
+                        color: AppColors.red, shape: BoxShape.circle),
                     ),
                   ],
                 ),
@@ -247,14 +247,14 @@ class _ChatScreenState extends State<ChatScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.surface1,
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.45)),
+        border: Border.all(color: AppColors.red.withValues(alpha: 0.45)),
         borderRadius: BorderRadius.circular(100),
       ),
       child: Row(
         children: [
           Text('${_score.value}',
             style: AppTypography.measurement.copyWith(
-              color: AppColors.gold, fontSize: 13, fontWeight: FontWeight.w800)),
+              color: AppColors.red, fontSize: 13, fontWeight: FontWeight.w800)),
           const SizedBox(width: 4),
           Text('/ 100',
             style: AppTypography.label.copyWith(
@@ -309,11 +309,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   decoration: BoxDecoration(
                     color: _sending
                       ? AppColors.surface3
-                      : AppColors.gold,
+                      : AppColors.red,
                     shape: BoxShape.circle,
                     boxShadow: _sending ? null : [
                       BoxShadow(
-                        color: AppColors.gold.withValues(alpha: 0.35),
+                        color: AppColors.red.withValues(alpha: 0.35),
                         blurRadius: 12),
                     ],
                   ),
@@ -381,7 +381,7 @@ class _MessageBubble extends StatelessWidget {
                       bottomRight: const Radius.circular(18),
                     ),
                     border: Border.all(
-                      color: (isUser ? AppColors.accent : AppColors.gold)
+                      color: (isUser ? AppColors.accent : AppColors.red)
                           .withValues(alpha: isFirst ? 0.4 : 0.18),
                       width: 0.8,
                     ),
@@ -394,7 +394,7 @@ class _MessageBubble extends StatelessWidget {
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Text('YOUR ANALYSIS',
                             style: AppTypography.label.copyWith(
-                              color: AppColors.gold, letterSpacing: 2.4, fontSize: 8)),
+                              color: AppColors.red, letterSpacing: 2.4, fontSize: 8)),
                         ),
                       Text(message.content,
                         style: AppTypography.body.copyWith(
@@ -431,10 +431,10 @@ class _MessageBubble extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface1,
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.55), width: 0.8),
+        border: Border.all(color: AppColors.red.withValues(alpha: 0.55), width: 0.8),
       ),
       child: const Center(
-        child: Icon(Icons.auto_awesome, size: 13, color: AppColors.gold)),
+        child: Icon(Icons.auto_awesome, size: 13, color: AppColors.red)),
     );
   }
 }
@@ -483,8 +483,8 @@ class _InlineBeforeAfter extends StatelessWidget {
                 height: 40,
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: AppColors.gold.withValues(alpha: 0.65)),
-                    foregroundColor: AppColors.gold,
+                    side: BorderSide(color: AppColors.red.withValues(alpha: 0.65)),
+                    foregroundColor: AppColors.red,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(Rd.md)),
                   ),
@@ -506,7 +506,7 @@ class _InlineBeforeAfter extends StatelessWidget {
                   icon: const Icon(Icons.ios_share_rounded, size: 14),
                   label: Text('SHARE',
                     style: AppTypography.label.copyWith(
-                      color: AppColors.gold, letterSpacing: 2.0,
+                      color: AppColors.red, letterSpacing: 2.0,
                       fontSize: 10, fontWeight: FontWeight.w900)),
                 ),
               ),
@@ -578,7 +578,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
                 child: Container(
                   width: 6, height: 6,
                   decoration: const BoxDecoration(
-                    color: AppColors.gold, shape: BoxShape.circle),
+                    color: AppColors.red, shape: BoxShape.circle),
                 ),
               ),
               if (i < 2) const SizedBox(width: 6),

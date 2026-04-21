@@ -42,7 +42,7 @@ class _RadarChartState extends State<RadarChart>
       decoration: BoxDecoration(
         color: AppColors.surface1,
         borderRadius: BorderRadius.circular(Rd.xl),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.28)),
+        border: Border.all(color: AppColors.red.withValues(alpha: 0.28)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -51,7 +51,7 @@ class _RadarChartState extends State<RadarChart>
             children: [
               Text('FACIAL RADAR',
                 style: AppTypography.label.copyWith(
-                  color: AppColors.gold, letterSpacing: 3.0, fontSize: 10)),
+                  color: AppColors.red, letterSpacing: 3.0, fontSize: 10)),
               const Spacer(),
               Text('Your Polygon · Ideal Polygon',
                 style: AppTypography.label.copyWith(
@@ -141,10 +141,10 @@ class _RadarPainter extends CustomPainter {
     }
     idealPath.close();
     canvas.drawPath(idealPath, Paint()
-      ..color = AppColors.gold.withValues(alpha: 0.12)
+      ..color = AppColors.red.withValues(alpha: 0.12)
       ..style = PaintingStyle.fill);
     canvas.drawPath(idealPath, Paint()
-      ..color = AppColors.gold.withValues(alpha: 0.3)
+      ..color = AppColors.red.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.6);
 
@@ -165,16 +165,16 @@ class _RadarPainter extends CustomPainter {
 
     // Glow underlay
     canvas.drawPath(userPath, Paint()
-      ..color = AppColors.gold.withValues(alpha: 0.35)
+      ..color = AppColors.red.withValues(alpha: 0.35)
       ..style = PaintingStyle.fill
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12));
     // Filled polygon
     canvas.drawPath(userPath, Paint()
-      ..color = AppColors.gold.withValues(alpha: 0.45)
+      ..color = AppColors.red.withValues(alpha: 0.45)
       ..style = PaintingStyle.fill);
     // Crisp outline
     canvas.drawPath(userPath, Paint()
-      ..color = AppColors.gold
+      ..color = AppColors.red
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
@@ -187,7 +187,7 @@ class _RadarPainter extends CustomPainter {
       final x = cx + math.cos(angle) * radius * v;
       final y = cy + math.sin(angle) * radius * v;
       canvas.drawCircle(Offset(x, y), 4.5, Paint()
-        ..color = AppColors.gold);
+        ..color = AppColors.red);
       canvas.drawCircle(Offset(x, y), 1.8, Paint()
         ..color = Colors.white);
     }

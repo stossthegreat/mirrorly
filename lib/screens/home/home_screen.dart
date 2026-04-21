@@ -91,7 +91,7 @@ class _ScanHubTab extends StatelessWidget {
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: onRefresh,
-        color: AppColors.gold,
+        color: AppColors.red,
         backgroundColor: AppColors.surface1,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(Sp.lg, Sp.lg, Sp.lg, Sp.xxl),
@@ -106,7 +106,7 @@ class _ScanHubTab extends StatelessWidget {
                 Container(
                   width: 5, height: 5, margin: const EdgeInsets.only(top: 8),
                   decoration: const BoxDecoration(
-                    color: AppColors.gold, shape: BoxShape.circle),
+                    color: AppColors.red, shape: BoxShape.circle),
                 ),
                 const Spacer(),
                 _IconBtn(
@@ -202,7 +202,7 @@ class _CheckInCard extends StatelessWidget {
       return (
         'START HERE',
         'Scan once. Real measurements — not a guess, not a rating.',
-        AppColors.gold,
+        AppColors.red,
       );
     }
     final daysSince = now.difference(latest!.takenAt).inDays;
@@ -245,7 +245,7 @@ class _ActiveProtocolCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.surface1,
             borderRadius: BorderRadius.circular(Rd.xl),
-            border: Border.all(color: AppColors.gold.withValues(alpha: 0.3), width: 0.8),
+            border: Border.all(color: AppColors.red.withValues(alpha: 0.3), width: 0.8),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -254,7 +254,7 @@ class _ActiveProtocolCard extends StatelessWidget {
                 children: [
                   Text('PROTOCOL · DAY ${protocol.currentDay} / ${protocol.lengthDays}',
                     style: AppTypography.label.copyWith(
-                      color: AppColors.gold, letterSpacing: 2.4, fontSize: 9)),
+                      color: AppColors.red, letterSpacing: 2.4, fontSize: 9)),
                   const Spacer(),
                   Icon(Icons.arrow_forward_rounded,
                     size: 14, color: AppColors.textSecondary),
@@ -284,8 +284,8 @@ class _ActiveProtocolCard extends StatelessWidget {
                       height: 3,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(colors: [
-                          AppColors.gold.withValues(alpha: 0.35),
-                          AppColors.gold,
+                          AppColors.red.withValues(alpha: 0.35),
+                          AppColors.red,
                         ]),
                         borderRadius: BorderRadius.circular(2),
                       ),
@@ -329,7 +329,7 @@ class _LatestSnapshot extends StatelessWidget {
             children: [
               Text('${scan.score}',
                 style: AppTypography.display.copyWith(
-                  fontSize: 44, color: AppColors.gold,
+                  fontSize: 44, color: AppColors.red,
                   letterSpacing: -2.2, height: 1)),
               Text('/ 100',
                 style: AppTypography.label.copyWith(
@@ -345,7 +345,7 @@ class _LatestSnapshot extends StatelessWidget {
               children: [
                 Text(scan.tierLabel.toUpperCase(),
                   style: AppTypography.label.copyWith(
-                    color: AppColors.gold, letterSpacing: 2.4, fontSize: 10)),
+                    color: AppColors.red, letterSpacing: 2.4, fontSize: 10)),
                 const SizedBox(height: 3),
                 Text(scan.archetypeName,
                   style: AppTypography.h1.copyWith(
@@ -383,7 +383,7 @@ class _PrimaryScanCta extends StatelessWidget {
       width: double.infinity, height: 58,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.gold,
+          backgroundColor: AppColors.red,
           foregroundColor: AppColors.base,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -417,7 +417,7 @@ class _NoScanYet extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.auto_awesome, size: 42,
-                  color: AppColors.gold.withValues(alpha: 0.65)),
+                  color: AppColors.red.withValues(alpha: 0.65)),
                 const SizedBox(height: Sp.md),
                 Text('Scan first.',
                   style: AppTypography.h1.copyWith(fontSize: 28, letterSpacing: -0.6)),
@@ -432,7 +432,7 @@ class _NoScanYet extends StatelessWidget {
                   height: 52,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.gold,
+                      backgroundColor: AppColors.red,
                       foregroundColor: AppColors.base,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(Rd.lg)),
@@ -489,13 +489,13 @@ class _NavBar extends StatelessWidget {
                         Icon(items[i].$2,
                           size: 20,
                           color: i == index
-                              ? AppColors.gold
+                              ? AppColors.red
                               : AppColors.textTertiary),
                         const SizedBox(height: 3),
                         Text(items[i].$1.toUpperCase(),
                           style: AppTypography.label.copyWith(
                             color: i == index
-                                ? AppColors.gold
+                                ? AppColors.red
                                 : AppColors.textTertiary,
                             fontSize: 8.5, letterSpacing: 1.8)),
                       ],
@@ -528,9 +528,9 @@ class _IconBtn extends StatelessWidget {
             color: Colors.transparent,
             shape: BoxShape.circle,
             border: Border.all(
-              color: AppColors.gold.withValues(alpha: 0.4), width: 0.8),
+              color: AppColors.red.withValues(alpha: 0.4), width: 0.8),
           ),
-          child: Icon(icon, size: 16, color: AppColors.gold),
+          child: Icon(icon, size: 16, color: AppColors.red),
         ),
       ),
     );
@@ -543,7 +543,7 @@ class _Splash extends StatelessWidget {
   Widget build(BuildContext context) => const Center(
     child: SizedBox(
       width: 28, height: 28,
-      child: CircularProgressIndicator(color: AppColors.gold, strokeWidth: 2),
+      child: CircularProgressIndicator(color: AppColors.red, strokeWidth: 2),
     ),
   );
 }

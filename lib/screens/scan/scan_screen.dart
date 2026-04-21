@@ -768,13 +768,13 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
                     color: Colors.black.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(100),
                     border: Border.all(
-                      color: AppColors.gold.withValues(alpha: 0.35), width: 0.8),
+                      color: AppColors.red.withValues(alpha: 0.35), width: 0.8),
                   ),
                   child: Text(
                     '${(_phase.index + 1).toString().padLeft(2, '0')} / 05  ·  '
                     '${_phase.name.toUpperCase()}',
                     style: AppTypography.label.copyWith(
-                      color: AppColors.gold,
+                      color: AppColors.red,
                       fontSize: 9,
                       letterSpacing: 2.4,
                     ),
@@ -824,7 +824,7 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
                 child: LinearProgressIndicator(
                   value: _progress,
                   backgroundColor: AppColors.surface3.withValues(alpha: 0.5),
-                  valueColor: const AlwaysStoppedAnimation(AppColors.gold),
+                  valueColor: const AlwaysStoppedAnimation(AppColors.red),
                   minHeight: 1.5,
                 ),
               ),
@@ -852,7 +852,7 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
                         width: 4, height: 4,
                         margin: const EdgeInsets.only(top: 6),
                         decoration: const BoxDecoration(
-                          color: AppColors.gold,
+                          color: AppColors.red,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -869,11 +869,11 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
                               color: Colors.black.withValues(alpha: 0.4),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: AppColors.gold.withValues(alpha: 0.4),
+                                color: AppColors.red.withValues(alpha: 0.4),
                                 width: 0.8),
                             ),
                             child: const Icon(Icons.tune,
-                              size: 16, color: AppColors.gold),
+                              size: 16, color: AppColors.red),
                           ),
                         ),
                       ),

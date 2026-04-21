@@ -57,11 +57,11 @@ class _ProgressScreenState extends State<ProgressScreen> {
             await _loadAll();
             await widget.onReload();
           },
-          color: AppColors.gold,
+          color: AppColors.red,
           backgroundColor: AppColors.surface1,
           child: _loading
               ? const Center(child: CircularProgressIndicator(
-                  color: AppColors.gold, strokeWidth: 2))
+                  color: AppColors.red, strokeWidth: 2))
               : _scans.isEmpty
                   ? _emptyState()
                   : _body(),
@@ -76,7 +76,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
       children: [
         SizedBox(height: MediaQuery.of(context).size.height * 0.15),
         Icon(Icons.show_chart_rounded,
-          size: 48, color: AppColors.gold.withValues(alpha: 0.6)),
+          size: 48, color: AppColors.red.withValues(alpha: 0.6)),
         const SizedBox(height: Sp.md),
         Text('No history yet.',
           textAlign: TextAlign.center,
@@ -91,7 +91,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
             height: 50,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.gold,
+                backgroundColor: AppColors.red,
                 foregroundColor: AppColors.base,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(Rd.lg)),
@@ -125,7 +125,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
             Container(
               width: 5, height: 5, margin: const EdgeInsets.only(top: 8),
               decoration: const BoxDecoration(
-                color: AppColors.gold, shape: BoxShape.circle),
+                color: AppColors.red, shape: BoxShape.circle),
             ),
           ],
         ),
@@ -157,7 +157,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
         if (_generations.isNotEmpty) ...[
           Text('GENERATION VAULT',
             style: AppTypography.label.copyWith(
-              color: AppColors.gold, letterSpacing: 2.5, fontSize: 10)),
+              color: AppColors.red, letterSpacing: 2.5, fontSize: 10)),
           const SizedBox(height: 6),
           Text('Every render, saved.',
             style: AppTypography.bodySmall.copyWith(
@@ -208,14 +208,14 @@ class _ChartCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface1,
         borderRadius: BorderRadius.circular(Rd.xl),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.28)),
+        border: Border.all(color: AppColors.red.withValues(alpha: 0.28)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('AESTHETIC INDEX · OVER TIME',
             style: AppTypography.label.copyWith(
-              color: AppColors.gold, letterSpacing: 2.5, fontSize: 9)),
+              color: AppColors.red, letterSpacing: 2.5, fontSize: 9)),
           const SizedBox(height: Sp.md),
           SizedBox(
             height: 160,
@@ -302,8 +302,8 @@ class _ScoreChartPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter, end: Alignment.bottomCenter,
           colors: [
-            AppColors.gold.withValues(alpha: 0.24),
-            AppColors.gold.withValues(alpha: 0.02),
+            AppColors.red.withValues(alpha: 0.24),
+            AppColors.red.withValues(alpha: 0.02),
           ],
         ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)));
     }
@@ -318,7 +318,7 @@ class _ScoreChartPainter extends CustomPainter {
         linePath.cubicTo(midX, prev.dy, midX, cur.dy, cur.dx, cur.dy);
       }
       canvas.drawPath(linePath, Paint()
-        ..color = AppColors.gold
+        ..color = AppColors.red
         ..strokeWidth = 2.2
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round);
@@ -329,7 +329,7 @@ class _ScoreChartPainter extends CustomPainter {
       final p = points[i];
       canvas.drawCircle(p, 4.5, Paint()..color = AppColors.surface1);
       canvas.drawCircle(p, 4.5, Paint()
-        ..color = AppColors.gold
+        ..color = AppColors.red
         ..strokeWidth = 1.6
         ..style = PaintingStyle.stroke);
 
@@ -339,7 +339,7 @@ class _ScoreChartPainter extends CustomPainter {
           text: TextSpan(
             text: '${scans[i].score}',
             style: TextStyle(
-              color: AppColors.gold, fontSize: 10, fontWeight: FontWeight.w800,
+              color: AppColors.red, fontSize: 10, fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
               fontFamilyFallback: const ['monospace']),
           ),
@@ -446,7 +446,7 @@ class _ScanHistoryList extends StatelessWidget {
       children: [
         Text('SCAN HISTORY',
           style: AppTypography.label.copyWith(
-            color: AppColors.gold, letterSpacing: 2.5, fontSize: 10)),
+            color: AppColors.red, letterSpacing: 2.5, fontSize: 10)),
         const SizedBox(height: Sp.sm),
         for (var i = 0; i < scans.length; i++) ...[
           _ScanRow(scan: scans[i], index: i + 1, total: scans.length),
@@ -492,7 +492,7 @@ class _ScanRow extends StatelessWidget {
           ),
           Text('${scan.score}',
             style: AppTypography.measurement.copyWith(
-              color: AppColors.gold, fontSize: 18, fontWeight: FontWeight.w800)),
+              color: AppColors.red, fontSize: 18, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -540,7 +540,7 @@ class _GenerationGrid extends StatelessWidget {
                     p == null ? child : const Center(
                       child: SizedBox(width: 16, height: 16,
                         child: CircularProgressIndicator(
-                          strokeWidth: 1.5, color: AppColors.gold))),
+                          strokeWidth: 1.5, color: AppColors.red))),
                 ),
               Positioned(
                 left: 0, right: 0, bottom: 0,

@@ -46,10 +46,10 @@ class _BeforeAfterCardState extends State<BeforeAfterCard> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(Rd.lg),
         border: Border.all(
-          color: AppColors.gold.withValues(alpha: 0.45), width: 0.9),
+          color: AppColors.red.withValues(alpha: 0.45), width: 0.9),
         boxShadow: [
           BoxShadow(
-            color: AppColors.gold.withValues(alpha: 0.12),
+            color: AppColors.red.withValues(alpha: 0.12),
             blurRadius: 22,
           ),
         ],
@@ -73,7 +73,7 @@ class _BeforeAfterCardState extends State<BeforeAfterCard> {
                         caption: widget.beforeLabel),
                     ),
                   ),
-                  Container(width: 1.5, color: AppColors.gold),
+                  Container(width: 1.5, color: AppColors.red),
                   Expanded(
                     child: _ImageHalf(
                       url: widget.afterUrl,
@@ -116,7 +116,7 @@ class _BeforeAfterCardState extends State<BeforeAfterCard> {
                       Expanded(child: Text(widget.afterLabel,
                         textAlign: TextAlign.right,
                         style: AppTypography.label.copyWith(
-                          color: AppColors.gold,
+                          color: AppColors.red,
                           fontSize: 10, letterSpacing: 2.6,
                           fontWeight: FontWeight.w900))),
                     ],
@@ -131,10 +131,10 @@ class _BeforeAfterCardState extends State<BeforeAfterCard> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: AppColors.gold,
+                      color: AppColors.red,
                       borderRadius: BorderRadius.circular(100),
                       boxShadow: [BoxShadow(
-                        color: AppColors.gold.withValues(alpha: 0.55),
+                        color: AppColors.red.withValues(alpha: 0.55),
                         blurRadius: 10)],
                     ),
                     child: Text('+${widget.potentialDelta} POTENTIAL',
@@ -161,12 +161,12 @@ class _BeforeAfterCardState extends State<BeforeAfterCard> {
                           color: Colors.black.withValues(alpha: 0.65),
                           borderRadius: BorderRadius.circular(100),
                           border: Border.all(
-                            color: AppColors.gold.withValues(alpha: 0.8),
+                            color: AppColors.red.withValues(alpha: 0.8),
                             width: 0.9),
                         ),
                         child: Text('TAP TO REVEAL',
                           style: AppTypography.label.copyWith(
-                            color: AppColors.gold,
+                            color: AppColors.red,
                             fontSize: 10, letterSpacing: 2.4,
                             fontWeight: FontWeight.w900)),
                       ),
@@ -224,7 +224,7 @@ class _ImageHalf extends StatelessWidget {
                 loadingBuilder: (_, child, p) => p == null ? child
                   : const Center(child: SizedBox(width: 22, height: 22,
                       child: CircularProgressIndicator(
-                        color: AppColors.gold, strokeWidth: 2))),
+                        color: AppColors.red, strokeWidth: 2))),
                 errorBuilder: (_, __, ___) => const ColoredBox(
                   color: Color(0xFF0E0E12)))
             : const ColoredBox(color: Color(0xFF0E0E12)));

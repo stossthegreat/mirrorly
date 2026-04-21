@@ -66,7 +66,7 @@ class FullscreenImage extends StatelessWidget {
                   child: SizedBox(
                     width: 30, height: 30,
                     child: CircularProgressIndicator(
-                      color: AppColors.gold, strokeWidth: 2),
+                      color: AppColors.red, strokeWidth: 2),
                   ),
                 );
               },
@@ -112,7 +112,7 @@ class FullscreenImage extends StatelessWidget {
                           child: Text(caption!,
                             maxLines: 1, overflow: TextOverflow.ellipsis,
                             style: AppTypography.label.copyWith(
-                              color: AppColors.gold, letterSpacing: 2.0,
+                              color: AppColors.red, letterSpacing: 2.0,
                               fontSize: 9)),
                         ),
                       ),

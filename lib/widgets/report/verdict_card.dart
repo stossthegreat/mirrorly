@@ -28,15 +28,15 @@ class VerdictCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft, end: Alignment.bottomRight,
           colors: [
-            AppColors.gold.withValues(alpha: 0.10),
+            AppColors.red.withValues(alpha: 0.10),
             AppColors.surface1,
           ],
         ),
         borderRadius: BorderRadius.circular(Rd.xl),
-        border: Border.all(color: AppColors.gold.withValues(alpha: 0.5), width: 1),
+        border: Border.all(color: AppColors.red.withValues(alpha: 0.5), width: 1),
         boxShadow: [
           BoxShadow(
-            color: AppColors.gold.withValues(alpha: 0.12),
+            color: AppColors.red.withValues(alpha: 0.12),
             blurRadius: 28, offset: const Offset(0, 8)),
         ],
       ),
@@ -47,19 +47,19 @@ class VerdictCard extends StatelessWidget {
             children: [
               Text('THE VERDICT',
                 style: AppTypography.label.copyWith(
-                  color: AppColors.gold, letterSpacing: 3.2, fontSize: 9)),
+                  color: AppColors.red, letterSpacing: 3.2, fontSize: 9)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.gold.withValues(alpha: 0.15),
+                  color: AppColors.red.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(100),
                   border: Border.all(
-                    color: AppColors.gold.withValues(alpha: 0.65), width: 0.8),
+                    color: AppColors.red.withValues(alpha: 0.65), width: 0.8),
                 ),
                 child: Text('$score · ${tier.toUpperCase()}',
                   style: AppTypography.label.copyWith(
-                    color: AppColors.gold, letterSpacing: 2.0, fontSize: 10,
+                    color: AppColors.red, letterSpacing: 2.0, fontSize: 10,
                     fontWeight: FontWeight.w800)),
               ),
             ],
@@ -78,11 +78,11 @@ class VerdictCard extends StatelessWidget {
           Row(
             children: [
               Icon(Icons.auto_awesome, size: 12,
-                color: AppColors.gold.withValues(alpha: 0.75)),
+                color: AppColors.red.withValues(alpha: 0.75)),
               const SizedBox(width: 6),
               Text(archetype.toUpperCase(),
                 style: AppTypography.label.copyWith(
-                  color: AppColors.gold.withValues(alpha: 0.9),
+                  color: AppColors.red.withValues(alpha: 0.9),
                   letterSpacing: 2.4, fontSize: 9,
                   fontWeight: FontWeight.w800)),
             ],

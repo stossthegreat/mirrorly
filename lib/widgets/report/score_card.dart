@@ -21,7 +21,7 @@ class ScoreCard extends StatelessWidget {
           center: Alignment.topLeft,
           radius: 1.6,
           colors: [
-            AppColors.gold.withValues(alpha: 0.13),
+            AppColors.red.withValues(alpha: 0.13),
             AppColors.surface1.withValues(alpha: 0.95),
             AppColors.surface1,
           ],
@@ -29,12 +29,12 @@ class ScoreCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(Rd.xxl),
         border: Border.all(
-          color: AppColors.gold.withValues(alpha: 0.35),
+          color: AppColors.red.withValues(alpha: 0.35),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.gold.withValues(alpha: 0.08),
+            color: AppColors.red.withValues(alpha: 0.08),
             blurRadius: 30,
             offset: const Offset(0, 8),
           ),
@@ -47,9 +47,9 @@ class ScoreCard extends StatelessWidget {
             children: [
               Text('AESTHETIC INDEX',
                 style: AppTypography.label.copyWith(
-                  color: AppColors.gold, letterSpacing: 3.2, fontSize: 9)),
+                  color: AppColors.red, letterSpacing: 3.2, fontSize: 9)),
               const SizedBox(width: 8),
-              _Pip(color: AppColors.gold.withValues(alpha: 0.75)),
+              _Pip(color: AppColors.red.withValues(alpha: 0.75)),
               const Spacer(),
               if (!score.reliable)
                 Text('LOW CONFIDENCE',
@@ -71,7 +71,7 @@ class ScoreCard extends StatelessWidget {
                       size: const Size(150, 150),
                       painter: _ScoreArcPainter(
                         value: score.value / 100,
-                        color: AppColors.gold,
+                        color: AppColors.red,
                         trackColor: AppColors.surface3,
                       ),
                     ),
@@ -104,7 +104,7 @@ class ScoreCard extends StatelessWidget {
                     children: [
                       Text(score.tierLabel,
                         style: AppTypography.h1.copyWith(
-                          color: AppColors.gold,
+                          color: AppColors.red,
                           fontSize: 30,
                           letterSpacing: -0.6,
                           height: 1.0,
@@ -205,14 +205,14 @@ class _AxisRow extends StatelessWidget {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        AppColors.gold.withValues(alpha: 0.35),
-                        AppColors.gold,
+                        AppColors.red.withValues(alpha: 0.35),
+                        AppColors.red,
                       ],
                     ),
                     borderRadius: BorderRadius.circular(2),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.gold.withValues(alpha: 0.35),
+                        color: AppColors.red.withValues(alpha: 0.35),
                         blurRadius: 6,
                       ),
                     ],
@@ -234,7 +234,7 @@ class _AxisRow extends StatelessWidget {
             textAlign: TextAlign.right,
             style: AppTypography.measurement.copyWith(
               fontSize: 11,
-              color: AppColors.gold.withValues(alpha: 0.85))),
+              color: AppColors.red.withValues(alpha: 0.85))),
         ),
       ],
     );

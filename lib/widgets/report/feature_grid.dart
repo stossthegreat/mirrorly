@@ -27,12 +27,12 @@ class FeatureGrid extends StatelessWidget {
           children: [
             Text('YOUR FACE · FEATURE BY FEATURE',
               style: AppTypography.label.copyWith(
-                color: AppColors.gold, letterSpacing: 2.8, fontSize: 9)),
+                color: AppColors.red, letterSpacing: 2.8, fontSize: 9)),
             const Spacer(),
             Container(
               width: 4, height: 4,
               decoration: const BoxDecoration(
-                color: AppColors.gold, shape: BoxShape.circle),
+                color: AppColors.red, shape: BoxShape.circle),
             ),
           ],
         ),
@@ -139,7 +139,7 @@ class _FeatureCard extends StatelessWidget {
                   children: [
                     Text('THE EXIT',
                       style: AppTypography.label.copyWith(
-                        color: AppColors.gold,
+                        color: AppColors.red,
                         letterSpacing: 2.2, fontSize: 8.5)),
                     const SizedBox(height: 3),
                     Text(read.fix,
@@ -154,21 +154,21 @@ class _FeatureCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                   decoration: BoxDecoration(
-                    color: AppColors.gold.withValues(alpha: 0.14),
+                    color: AppColors.red.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: AppColors.gold.withValues(alpha: 0.55), width: 0.7),
+                      color: AppColors.red.withValues(alpha: 0.55), width: 0.7),
                   ),
                   child: Column(
                     children: [
                       Text('+${read.pointLift}',
                         style: AppTypography.measurement.copyWith(
-                          color: AppColors.gold, fontSize: 16,
+                          color: AppColors.red, fontSize: 16,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.5)),
                       Text('POINTS',
                         style: AppTypography.label.copyWith(
-                          color: AppColors.gold, fontSize: 7.5,
+                          color: AppColors.red, fontSize: 7.5,
                           letterSpacing: 1.6)),
                     ],
                   ),
@@ -184,8 +184,8 @@ class _FeatureCard extends StatelessWidget {
               width: double.infinity, height: 38,
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: AppColors.gold.withValues(alpha: 0.55)),
-                  foregroundColor: AppColors.gold,
+                  side: BorderSide(color: AppColors.red.withValues(alpha: 0.55)),
+                  foregroundColor: AppColors.red,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(Rd.md)),
                 ),
@@ -194,11 +194,11 @@ class _FeatureCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Icon(Icons.auto_awesome,
-                      size: 12, color: AppColors.gold),
+                      size: 12, color: AppColors.red),
                     const SizedBox(width: 8),
                     Text('SEE THIS FIX ON MY FACE',
                       style: AppTypography.label.copyWith(
-                        color: AppColors.gold, letterSpacing: 2.0,
+                        color: AppColors.red, letterSpacing: 2.0,
                         fontSize: 9.5, fontWeight: FontWeight.w800)),
                   ],
                 ),

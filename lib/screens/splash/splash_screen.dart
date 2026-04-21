@@ -102,7 +102,7 @@ class _SplashScreenState extends State<SplashScreen> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: AppColors.gold.withValues(alpha: 0.35),
+                            color: AppColors.red.withValues(alpha: 0.35),
                             width: 1,
                           ),
                         ),
@@ -113,20 +113,20 @@ class _SplashScreenState extends State<SplashScreen> {
                       Container(
                         width: 6, height: 6,
                         decoration: const BoxDecoration(
-                          color: AppColors.gold,
+                          color: AppColors.red,
                           shape: BoxShape.circle,
                         ),
                       ).animate().fadeIn(delay: 600.ms, duration: 500.ms),
                       // Crosshair
                       Container(
                         width: 92, height: 1,
-                        color: AppColors.gold.withValues(alpha: 0.22),
+                        color: AppColors.red.withValues(alpha: 0.22),
                       ).animate().fadeIn(delay: 700.ms, duration: 500.ms)
                         .scaleX(begin: 0, end: 1,
                             delay: 700.ms, duration: 600.ms, curve: Curves.easeOut),
                       Container(
                         width: 1, height: 92,
-                        color: AppColors.gold.withValues(alpha: 0.22),
+                        color: AppColors.red.withValues(alpha: 0.22),
                       ).animate().fadeIn(delay: 700.ms, duration: 500.ms)
                         .scaleY(begin: 0, end: 1,
                             delay: 700.ms, duration: 600.ms, curve: Curves.easeOut),
@@ -171,7 +171,7 @@ class _SplashScreenState extends State<SplashScreen> {
                       width: size.width,
                       child: const LinearProgressIndicator(
                         backgroundColor: AppColors.surface2,
-                        valueColor: AlwaysStoppedAnimation(AppColors.gold),
+                        valueColor: AlwaysStoppedAnimation(AppColors.red),
                         minHeight: 1,
                       ),
                     ).animate().fadeIn(delay: 1600.ms, duration: 500.ms),
