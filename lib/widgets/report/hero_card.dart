@@ -1,29 +1,36 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../theme/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_typography.dart';
 
-/// The hero moment on the report — the screenshot people post.
+/// Hero card on the report page. Editorial black & white — zero gold, zero
+/// gradients, zero chrome. Mirrors the share card's design language so the
+/// in-app moment and the screenshot feel like one continuous thing.
 ///
-/// Structure (locked):
-///   1.  CURRENT  →  PROJECTED   (huge, dominant, the "wait, I could go up?")
-///   2.  Tagline                  (one sentence, sharp, emotional)
-///   3.  Before / After           (full width, gold-framed)
-///   4.  "X CHANGES. SAME FACE."  (centered)
-///   5.  Three micro-proof lines  (top % strengths, diamond glyph)
+/// Stack (top → bottom):
+///   1.  54 → 76    CURRENT · PROJECTED     (slim white serif numbers)
+///   2.  [ BEFORE | AFTER ]                  (tight face crop, no border)
+///   3.  "You're not unattractive.           (italic serif tagline,
+///        You're unoptimized."                 centered, UNDER the image)
+///   4.  Top 3% hunter eyes                  (plain text, sentence case,
+///       Top 5% symmetry                      17pt Inter, white)
+///       Strong jaw
 ///
-/// Counter animates 0 → current → arrow → projected over ~2.2s. The arrow +
-/// projected number are the dopamine — the user sees themselves go up before
-/// they read a single word of the report.
+/// The score transition still animates: current counts up first, then the
+/// thin arrow + projected number reveal. That remains the dopamine moment.
 class HeroCard extends StatefulWidget {
-  final int currentScore;       // e.g. 57
-  final int projectedScore;     // e.g. 74
-  final String tagline;         // e.g. "You're hiding your structure."
+  final int currentScore;       // e.g. 54
+  final int projectedScore;     // e.g. 76
+  final String tagline;         // "You're not unattractive. / You're unoptimized."
   final Uint8List? beforeBytes;
   final String? afterUrl;
-  final int correctionsCount;   // e.g. 3 → "3 CHANGES. SAME FACE."
-  final List<String> microProofs; // 3 short uppercase lines
+  // Retained for API compatibility with the report screen. No longer
+  // rendered — we dropped the "3 CHANGES. SAME FACE." sub-line because
+  // the before/after image plus the tagline already say it, and one less
+  // line makes the whole card breathe.
+  final int correctionsCount;
+  final List<String> microProofs; // up to 3 short lines
 
   const HeroCard({
     super.key,
@@ -63,145 +70,113 @@ class _HeroCardState extends State<HeroCard>
     final proofs = widget.microProofs.take(3).toList();
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(Sp.lg, 32, Sp.lg, 26),
+      padding: const EdgeInsets.fromLTRB(Sp.lg, 36, Sp.lg, 28),
       decoration: BoxDecoration(
-        gradient: RadialGradient(
-          center: const Alignment(0, -0.3),
-          radius: 1.2,
-          colors: [
-            AppColors.gold.withValues(alpha: 0.18),
-            const Color(0xFF080808),
-          ],
-        ),
+        // Pure #000 — no radial glow, no gradient, no gold. Content does
+        // the work, the surface gets out of the way.
+        color: Colors.black,
         borderRadius: BorderRadius.circular(Rd.xxl),
+        // Hairline in 8% white — structural frame, not ornament.
         border: Border.all(
-          color: AppColors.gold.withValues(alpha: 0.4), width: 0.9),
+          color: Colors.white.withValues(alpha: 0.08), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── 1 · SCORE TRANSITION (the dominant message) ────────────────
-          // Current animates up first, arrow + projected pop in after.
+          // ── 1 · SCORE TRANSITION ─────────────────────────────────────
+          // Slimmer than before. Current in muted white, projected in
+          // pure white at slightly larger size — no colour distinction.
           _ScoreTransition(
             controller: _counter,
             currentScore: widget.currentScore,
             projectedScore: widget.projectedScore,
           ),
 
-          const SizedBox(height: 12),
-          // Tiny labels under each number.
+          const SizedBox(height: 8),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SizedBox(width: 96, child: Text('CURRENT',
+              SizedBox(width: 92, child: Text('CURRENT',
                 textAlign: TextAlign.center,
-                style: AppTypography.label.copyWith(
-                  color: AppColors.textTertiary,
-                  fontSize: 9, letterSpacing: 2.6,
-                  fontWeight: FontWeight.w800))),
-              const SizedBox(width: 40),
-              SizedBox(width: 96, child: Text('PROJECTED',
+                style: GoogleFonts.inter(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  fontSize: 10, letterSpacing: 3.0,
+                  fontWeight: FontWeight.w700,
+                ))),
+              const SizedBox(width: 56),
+              SizedBox(width: 92, child: Text('PROJECTED',
                 textAlign: TextAlign.center,
-                style: AppTypography.label.copyWith(
-                  color: AppColors.gold,
-                  fontSize: 9, letterSpacing: 2.6,
-                  fontWeight: FontWeight.w800))),
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 10, letterSpacing: 3.0,
+                  fontWeight: FontWeight.w700,
+                ))),
             ],
           ).animate().fadeIn(delay: 1500.ms, duration: 400.ms),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 26),
 
-          // ── 2 · TAGLINE ──────────────────────────────────────────────
-          // Italic serif, max 2 lines. Sharp + emotional, not marketing copy.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
+          // ── 2 · IMAGE ─────────────────────────────────────────────
+          // Tight 5:6 portrait. BoxFit.cover + alignment(0,-0.35) pushes
+          // the eyes into the upper third and drops the chest. No border,
+          // no shadow — the image is the statement.
+          AspectRatio(
+            aspectRatio: 5 / 6,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(Rd.md),
+              child: Row(
+                children: [
+                  Expanded(child: _half(
+                    bytes: widget.beforeBytes, url: null,
+                    label: 'NOW', align: Alignment.bottomLeft)),
+                  Container(width: 1, color: Colors.white),
+                  Expanded(child: _half(
+                    bytes: null, url: widget.afterUrl,
+                    label: 'FIXED', align: Alignment.bottomRight)),
+                ],
+              ),
+            ),
+          ).animate().fadeIn(delay: 1700.ms, duration: 500.ms),
+
+          const SizedBox(height: 26),
+
+          // ── 3 · TAGLINE (UNDER the image per spec) ─────────────────
+          Center(
             child: Text(widget.tagline,
               textAlign: TextAlign.center,
-              maxLines: 2, overflow: TextOverflow.ellipsis,
-              style: AppTypography.h1Italic.copyWith(
-                color: AppColors.textPrimary,
-                fontSize: 22, height: 1.25, letterSpacing: -0.2,
+              maxLines: 3, overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.playfairDisplay(
+                color: Colors.white,
+                fontSize: 22, letterSpacing: -0.3,
+                fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w500, height: 1.3,
               )),
-          ).animate().fadeIn(delay: 1700.ms, duration: 500.ms)
-            .slideY(begin: 0.2, end: 0,
-              delay: 1700.ms, duration: 500.ms, curve: Curves.easeOut),
-
-          const SizedBox(height: 22),
-
-          // ── 3 · BEFORE / AFTER (full width inside the card) ─────────
-          AspectRatio(
-            aspectRatio: 4 / 3, // wide, both faces tall enough to read
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(Rd.lg),
-                border: Border.all(
-                  color: AppColors.gold.withValues(alpha: 0.55), width: 1.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.gold.withValues(alpha: 0.18),
-                    blurRadius: 18, spreadRadius: 1),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(Rd.lg),
-                child: Row(
-                  children: [
-                    Expanded(child: _half(widget.beforeBytes, null)),
-                    Container(width: 1.2, color: AppColors.gold),
-                    Expanded(child: _half(null, widget.afterUrl)),
-                  ],
-                ),
-              ),
-            ),
           ).animate().fadeIn(delay: 1900.ms, duration: 500.ms),
 
-          const SizedBox(height: 16),
-
-          // ── 4 · "X CHANGES. SAME FACE." ──────────────────────────────
-          Center(
-            child: Text(
-              '${widget.correctionsCount} CHANGES.  SAME FACE.',
-              style: AppTypography.label.copyWith(
-                color: AppColors.textPrimary,
-                fontSize: 13, letterSpacing: 3.4,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ).animate().fadeIn(delay: 2100.ms, duration: 400.ms),
-
           if (proofs.isNotEmpty) ...[
-            const SizedBox(height: 18),
+            const SizedBox(height: 22),
             Container(height: 1,
-              color: AppColors.gold.withValues(alpha: 0.18)),
-            const SizedBox(height: 16),
+              color: Colors.white.withValues(alpha: 0.08)),
+            const SizedBox(height: 18),
 
-            // ── 5 · MICRO PROOFS ──────────────────────────────────────
+            // ── 4 · MICRO PROOFS ─────────────────────────────────────
+            // Plain text, sentence case, bigger than before so each line
+            // lands as its own moment. No bullets, no boxes, no colour.
             for (var i = 0; i < proofs.length; i++) ...[
-              Row(
-                children: [
-                  Text('◇',
-                    style: TextStyle(
-                      color: AppColors.gold,
-                      fontSize: 13, height: 1,
-                      fontWeight: FontWeight.w800)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(proofs[i],
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: AppTypography.label.copyWith(
-                        color: AppColors.textPrimary,
-                        fontSize: 12, letterSpacing: 2.2,
-                        fontWeight: FontWeight.w800,
-                      )),
-                  ),
-                ],
+              Text(_prettyCase(proofs[i]),
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 17, letterSpacing: 0.1,
+                  fontWeight: FontWeight.w500, height: 1.35,
+                ),
               ).animate().fadeIn(
-                delay: Duration(milliseconds: 2300 + i * 140),
+                delay: Duration(milliseconds: 2100 + i * 140),
                 duration: 350.ms,
-              ).slideX(begin: -0.05, end: 0,
-                delay: Duration(milliseconds: 2300 + i * 140),
+              ).slideX(begin: -0.03, end: 0,
+                delay: Duration(milliseconds: 2100 + i * 140),
                 duration: 350.ms, curve: Curves.easeOut),
-              if (i != proofs.length - 1) const SizedBox(height: 8),
+              if (i != proofs.length - 1) const SizedBox(height: 6),
             ],
           ],
         ],
@@ -209,21 +184,71 @@ class _HeroCardState extends State<HeroCard>
     );
   }
 
-  Widget _half(Uint8List? bytes, String? url) {
-    if (bytes != null) {
-      return Image.memory(bytes, fit: BoxFit.cover);
-    }
-    if (url != null && url.isNotEmpty) {
-      return Image.network(url, fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const ColoredBox(color: AppColors.surface1));
-    }
-    return const ColoredBox(color: AppColors.surface1);
+  Widget _half({
+    required Uint8List? bytes,
+    required String? url,
+    required String label,
+    required Alignment align,
+  }) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (bytes != null)
+          Image.memory(bytes,
+            fit: BoxFit.cover,
+            alignment: const Alignment(0, -0.35))
+        else if (url != null && url.isNotEmpty)
+          Image.network(url,
+            fit: BoxFit.cover,
+            alignment: const Alignment(0, -0.35),
+            errorBuilder: (_, __, ___) =>
+              const ColoredBox(color: Color(0xFF0C0C0C)))
+        else
+          const ColoredBox(color: Color(0xFF0C0C0C)),
+
+        // Gentle scrim so corner label never fights the skin tone behind.
+        Positioned(
+          left: 0, right: 0, bottom: 0, height: 64,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.55),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          child: Align(
+            alignment: align,
+            child: Text(label,
+              style: GoogleFonts.inter(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 9.5, letterSpacing: 2.6,
+                fontWeight: FontWeight.w700,
+              )),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _prettyCase(String s) {
+    final lower = s.toLowerCase();
+    if (lower.isEmpty) return s;
+    return lower[0].toUpperCase() + lower.substring(1);
   }
 }
 
-/// Number-arrow-number block. The current number animates 0→current first
-/// (dopamine of seeing your score), then the arrow + projected number pop
-/// in with elastic scale (dopamine of seeing it go UP).
+/// Number → arrow → number block. Both numbers white (no gold). Current
+/// counts up on entry, then the thin arrow + projected number reveal with
+/// a subtle opacity/scale pop. Restrained — the numbers aren't the loudest
+/// thing on the card anymore; the image is.
 class _ScoreTransition extends StatelessWidget {
   final AnimationController controller;
   final int currentScore;
@@ -242,62 +267,49 @@ class _ScoreTransition extends StatelessWidget {
       builder: (_, __) {
         final t = Curves.easeOutExpo.transform(controller.value);
         final shownCurrent = (t * currentScore).round();
-        // Projected reveals after current finishes (last 30% of timeline).
         final revealT = ((controller.value - 0.7) / 0.3).clamp(0.0, 1.0);
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Current — neutral white-gold tone
             SizedBox(
-              width: 96,
+              width: 92,
               child: Text('$shownCurrent',
                 textAlign: TextAlign.center,
-                style: AppTypography.display.copyWith(
-                  fontSize: 86, height: 0.95, letterSpacing: -3,
-                  color: AppColors.textPrimary,
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 64, height: 1.0, letterSpacing: -2.0,
+                  color: Colors.white.withValues(alpha: 0.62),
                   fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w500,
                 )),
             ),
-
-            // Arrow — gold, scales in with the projection
-            const SizedBox(width: 16),
-            Transform.scale(
-              scale: 0.6 + revealT * 0.6,
-              child: Opacity(
-                opacity: revealT,
+            const SizedBox(width: 28),
+            Opacity(
+              opacity: revealT,
+              child: Transform.scale(
+                scale: 0.8 + revealT * 0.2,
                 child: Text('→',
-                  style: TextStyle(
-                    color: AppColors.gold,
-                    fontSize: 50,
-                    height: 0.95,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 36, height: 1,
                     fontWeight: FontWeight.w300,
-                    shadows: [
-                      Shadow(color: AppColors.gold.withValues(alpha: 0.55),
-                        blurRadius: 14),
-                    ],
                   )),
               ),
             ),
-            const SizedBox(width: 16),
-
-            // Projected — gold + glow, slight elastic pop
+            const SizedBox(width: 28),
             SizedBox(
-              width: 96,
-              child: Transform.scale(
-                scale: 0.85 + revealT * 0.15,
-                child: Opacity(
-                  opacity: revealT,
+              width: 92,
+              child: Opacity(
+                opacity: revealT,
+                child: Transform.scale(
+                  scale: 0.9 + revealT * 0.1,
                   child: Text('$projectedScore',
                     textAlign: TextAlign.center,
-                    style: AppTypography.display.copyWith(
-                      fontSize: 102, height: 0.95, letterSpacing: -3.5,
-                      color: AppColors.gold,
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 76, height: 1.0, letterSpacing: -2.2,
+                      color: Colors.white,
                       fontStyle: FontStyle.italic,
-                      shadows: [
-                        Shadow(color: AppColors.gold.withValues(alpha: 0.6),
-                          blurRadius: 28),
-                      ],
+                      fontWeight: FontWeight.w700,
                     )),
                 ),
               ),

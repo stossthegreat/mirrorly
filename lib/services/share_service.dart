@@ -143,7 +143,10 @@ class ShareService {
           data: MediaQueryData(size: logicalSize, devicePixelRatio: pixelRatio),
           child: Theme(
             data: Theme.of(context),
-            child: ColoredBox(color: AppColors.base, child: widget),
+            // Pure black surface — NOT AppColors.base (#07070A). The share
+            // card prints against true #000000 so the edges disappear into
+            // whatever surface it's posted on.
+            child: ColoredBox(color: Colors.black, child: widget),
           ),
         ),
       ),
