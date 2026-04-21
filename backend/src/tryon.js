@@ -77,119 +77,54 @@ function normalizeCategory(c) {
 }
 
 /**
- * buildPrompt — BFL-canonical structure:
- *   1. Name the subject (no pronouns)
- *   2. State the single change
- *   3. CATEGORY-SPECIFIC preservation clause enumerating every other
- *      region Kontext must leave identical, INCLUDING the sibling
- *      regions it would otherwise "improve" on its own
- *   4. Global pose/lighting/background preservation
+ * buildPrompt — BFL-canonical structure + ONE category-specific
+ * sibling-lock clause.
  *
- * No negative prompting ("do not change X") — Kontext can attend to
- * forbidden concepts and invert the intent. Only positive preservation.
+ * Kontext's attention budget is finite. Before, we shipped a long
+ * enumerated preservation list per category ("keep the beard, keep the
+ * hair, keep the skin, keep the eyes, keep the nose, keep the lips,
+ * keep the jaw, keep the ethnicity, keep the age...") — that length
+ * dilutes the signal and actually hurts identity preservation.
+ *
+ * The structure here is:
+ *   1. Subject + single change (BFL canonical opener, no pronouns)
+ *   2. BFL's canonical 7-word preservation formula + identity anchors
+ *   3. ONE short sibling-lock sentence naming the adjacent zone
+ *      Kontext is most likely to drift for this category (e.g. a
+ *      haircut run most commonly drifts the beard; a beard run drifts
+ *      the haircut). One sentence, not a list.
+ *   4. Pose/lighting/background lock
+ *
+ * Positive-only (no "do not" — BFL: negatives can invert intent).
  */
 function buildPrompt({ styleRequest, category }) {
-  const { editZone, preserveList } = zoneSpec(category);
+  const sibling = siblingLock(category);
 
-  return `The person in this photo. Make this single change: ${styleRequest}.
-
-Only alter ${editZone}. Keep the exact same ${preserveList} — these must remain identical to the original photo.
-
-Preserve the original pose, camera angle, framing, facial expression, lighting, and background exactly. Natural skin texture with visible pores. Photorealistic portrait.`;
+  return `The person in this photo, now with ${styleRequest.replace(/^(make\s+|apply\s+)/i, '')}, while maintaining the same facial features, hairstyle, expression, age, skin tone, and ethnicity.${sibling ? ' ' + sibling : ''} Same pose, camera angle, framing, lighting, and background as the original. Photorealistic, natural pores preserved.`;
 }
 
 /**
- * For each category, list:
- *   editZone      — the spatial zone Flux is allowed to change
- *   preserveList  — every OTHER region that must stay identical, INCLUDING
- *                   the regions a naive Kontext run would drift
- *                   (e.g. haircut edits often drift beard, skin, eye tone)
+ * The ONE adjacent zone Kontext most commonly drifts per category.
+ * Short, declarative, positive. No list.
  */
-function zoneSpec(category) {
+function siblingLock(category) {
   switch (category) {
     case 'haircut':
-      return {
-        editZone: 'the hair on the head (length, style, cut)',
-        preserveList:
-          'facial hair (beard, moustache, stubble) exactly as-is; ' +
-          'skin tone, skin texture, and complexion; ' +
-          'eyes, eye colour, eye shape, eyebrows; ' +
-          'nose, lips, jaw, chin, cheekbones, and overall bone structure; ' +
-          'ethnicity, age, and identity',
-      };
-
     case 'hair_color':
-      return {
-        editZone: 'the hair colour on the head',
-        preserveList:
-          'hair length, hair style, hair cut, and hairline exactly as-is; ' +
-          'facial hair colour and shape; ' +
-          'skin tone, eyes, eye colour, eyebrows, nose, lips, jaw, bone structure, ethnicity, age, and identity',
-      };
-
+      return 'The facial hair stays exactly as in the original.';
     case 'beard':
     case 'facial_hair':
-      return {
-        editZone: 'the facial hair on the chin, jaw, and upper lip',
-        preserveList:
-          'the hair on the head (length, style, cut, colour) exactly as-is; ' +
-          'skin tone and texture; ' +
-          'eyes, eye colour, eyebrows, nose, lips, jaw, chin, and bone structure underneath; ' +
-          'ethnicity, age, and identity',
-      };
-
-    case 'eyebrow':
-      return {
-        editZone: 'the eyebrow shape and grooming',
-        preserveList:
-          'the hair on the head and facial hair exactly as-is; ' +
-          'skin tone and texture; ' +
-          'eyes, eye colour, eye shape, nose, lips, jaw, bone structure, ethnicity, age, and identity',
-      };
-
+      return 'The hair on the head stays exactly as in the original.';
     case 'skin':
-      return {
-        editZone: 'the skin tone, texture, and complexion — with natural pores preserved',
-        preserveList:
-          'the hair on the head (length, style, cut, colour) exactly as-is; ' +
-          'facial hair (beard, moustache, stubble) exactly as-is; ' +
-          'eyes, eye colour, eye shape, eyebrows, nose, lips, jaw, bone structure, ethnicity, age, and identity',
-      };
-
+      return 'The hair on the head and the facial hair stay exactly as in the original.';
+    case 'eyebrow':
+      return 'The hair on the head, facial hair, and skin stay exactly as in the original.';
     case 'glasses':
-      return {
-        editZone: 'the eyewear (add, remove, or change frames as described)',
-        preserveList:
-          'the hair on the head and facial hair exactly as-is; ' +
-          'skin tone and texture; ' +
-          'eyes, eye colour, eye shape, eyebrows, nose, lips, jaw, bone structure, ethnicity, age, and identity',
-      };
-
-    case 'weight':
-      return {
-        editZone: 'the facial fat distribution very subtly (no more than 5–8% change; no bone movement)',
-        preserveList:
-          'the hair on the head and facial hair exactly as-is; ' +
-          'skin tone and texture; ' +
-          'eyes, eye colour, eyebrows, nose shape, lip shape, jaw angle, chin, cheekbone position, bone structure, ethnicity, age, and identity',
-      };
-
     case 'teeth':
-      return {
-        editZone: 'only the teeth (whitening or alignment as described)',
-        preserveList:
-          'the hair on the head and facial hair; ' +
-          'skin tone and texture; ' +
-          'lip shape and lip colour; ' +
-          'eyes, eye colour, eyebrows, nose, jaw, bone structure, ethnicity, age, and identity',
-      };
-
-    default: // 'generic' — conservative fallback
-      return {
-        editZone: 'only the specific feature named in the change above',
-        preserveList:
-          'every other feature of the face — the hair on the head, facial hair, skin tone and texture, eyes, eye colour, eyebrows, nose, lips, jaw, bone structure, ethnicity, age, and identity — exactly as in the original',
-      };
+    case 'weight':
+      return 'Every other feature stays exactly as in the original.';
+    default:
+      return 'Every other feature stays exactly as in the original.';
   }
 }
 

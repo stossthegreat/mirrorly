@@ -3,9 +3,13 @@ import crypto from 'node:crypto';
 
 const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 
-// Pro on every pass. Less identity drift than Max for our use case per
-// BFL + community benchmarks.
-const MODEL = 'black-forest-labs/flux-kontext-pro';
+// SOLO calls from the original photo want MAX, not Pro.
+// Research (BFL + Fireworks + flux-kontext.io comparisons): Pro is
+// more stable over LONG CHAINS (its drift per step is smaller); Max
+// has higher SINGLE-SHOT fidelity (it lands closer to the reference
+// in one pass). Since every call here is a solo from the original,
+// every call is a single shot — Max is the correct pick.
+const MODEL = 'black-forest-labs/flux-kontext-max';
 
 /**
  * Generate the Maximized Twin.
@@ -94,14 +98,22 @@ function defaultImprove() {
 }
 
 /**
- * BFL-canonical Kontext prompt, positive-only preservation clause, no
- * negative prompting (BFL: negatives can invert intent).
+ * BFL-canonical Kontext prompt — as short as it gets.
+ *
+ * Kontext's attention budget is finite; a long enumerated preservation
+ * list ("keep the jaw, keep the nose, keep the lips, keep the eyes...")
+ * dilutes the signal rather than reinforcing it. BFL's own i2i guide
+ * shows the canonical preservation phrase is a literal 7-word formula:
+ *   "while maintaining the same facial features, hairstyle, and
+ *    expression"
+ * We extend it with three more identity anchors (age, skin tone,
+ * ethnicity) and nothing else. Shorter = tighter attention = less drift.
+ *
+ * Positive-only phrasing — no "do not" (BFL: negatives can invert).
  */
 function buildSoloPrompt(visualChange) {
   const change = String(visualChange || '').trim();
-  return `The person in this photo. Make this single change: ${change}.
-
-Keep the exact same facial features, bone structure, face shape, jawline, nose shape, eye shape and colour, lips, ethnicity, age, and overall identity completely identical to the reference image. Natural skin texture with visible pores. Preserve the original pose, camera angle, framing, facial expression, lighting, and background. Everything not named in the change above stays pixel-identical.`;
+  return `The person in this photo, now with ${change}, while maintaining the same facial features, hairstyle, expression, age, skin tone, and ethnicity. Same pose, camera angle, framing, lighting, and background as the original. Photorealistic, natural pores preserved.`;
 }
 
 /**
