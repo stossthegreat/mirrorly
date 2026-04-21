@@ -286,6 +286,13 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
           if (mesh != null && mesh.isValid) {
             _meshHit++;
             _lastMeshPts = mesh.points.length;
+            // Clear any stale error from the warm-up frames so the HUD
+            // doesn't keep showing "plugin returned no faces" after the
+            // plugin has clearly recovered.
+            if (_pipelineErr.startsWith('FM:') ||
+                _pipelineErr.contains('MESH')) {
+              _pipelineErr = '';
+            }
           }
         } catch (e) {
           _pipelineErr = 'FM: ${_trim(e)}';
@@ -327,14 +334,30 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
       // ── Face-ID style signals ───────────────────────────────────────────
       // Bbox area (fraction of image), center offset, yaw. Feed the oval
       // guide + gate progression on these rather than a frame counter alone.
+      //
+      // CRITICAL: ML Kit returns bounding-box coordinates in the UPRIGHT
+      // (rotated) frame, not the raw sensor frame. For a 1280x720 landscape
+      // sensor at rotation 270° the upright frame is 720x1280 portrait, so
+      // `bb.left/right` live in 0..720 and `bb.top/bottom` in 0..1280. If we
+      // normalize by the raw sensor dims instead, a perfectly-centered face
+      // reads as offset ≈ -0.4, the "CENTER YOUR FACE" check fails every
+      // frame, the phase never advances to SCANNING, and the mesh overlay
+      // never renders — which is exactly the Android symptom users hit
+      // despite MediaPipe returning all 468 points. Swap the dims for
+      // 90°/270° rotations so the centered-check uses the same frame the
+      // bbox is actually in.
       {
         final bb = face.boundingBox;
-        final imgA = imgW * imgH;
-        _bboxArea = (bb.width * bb.height) / (imgA <= 0 ? 1 : imgA);
-        final cx = (bb.left + bb.right) / 2;
-        final cy = (bb.top + bb.bottom) / 2;
-        _offsetX = ((cx - imgW / 2) / imgW) * 2;  // roughly -1..1
-        _offsetY = ((cy - imgH / 2) / imgH) * 2;
+        final bool swapped = _rotation == InputImageRotation.rotation90deg ||
+                             _rotation == InputImageRotation.rotation270deg;
+        final double uprightW = swapped ? imgH : imgW;
+        final double uprightH = swapped ? imgW : imgH;
+        final double uprightA = uprightW * uprightH;
+        _bboxArea = (bb.width * bb.height) / (uprightA <= 0 ? 1 : uprightA);
+        final double cx = (bb.left + bb.right) / 2;
+        final double cy = (bb.top + bb.bottom) / 2;
+        _offsetX = ((cx - uprightW / 2) / uprightW) * 2;  // roughly -1..1
+        _offsetY = ((cy - uprightH / 2) / uprightH) * 2;
         // Raw yaw from ML Kit. Convention: subject turning toward OWN LEFT
         // shoulder = NEGATIVE. iOS system-mirrors the preview but ML Kit
         // output is in the same mirrored space, so the raw yaw already
