@@ -46,36 +46,35 @@ class ShareCard extends StatelessWidget {
       child: ColoredBox(
         color: Colors.black,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(40, 48, 40, 44),
+          padding: const EdgeInsets.fromLTRB(40, 40, 40, 40),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ── 1 · SCORE TRANSITION (or just "Mirrorly" if no scores) ──
-              // Sized for 1080×1920 export. These LOOK huge in code —
-              // but on a social feed thumbnail they'll read as the
-              // dominant element of the card, which is the point.
+              // Sized LARGE for 1080×1920 export. These look absurd in
+              // code; at export size they read as the dominant element.
               if (hasScores) ...[
                 _ScoreTransitionStatic(
                   currentScore:   currentScore,
                   projectedScore: projectedScore,
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SizedBox(width: 160, child: Text('CURRENT',
+                    SizedBox(width: 200, child: Text('CURRENT',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
                         color: Colors.white.withValues(alpha: 0.5),
-                        fontSize: 17, letterSpacing: 4.0,
+                        fontSize: 22, letterSpacing: 4.4,
                         fontWeight: FontWeight.w700,
                       ))),
-                    const SizedBox(width: 90),
-                    SizedBox(width: 160, child: Text('PROJECTED',
+                    const SizedBox(width: 100),
+                    SizedBox(width: 200, child: Text('PROJECTED',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
                         color: Colors.white,
-                        fontSize: 17, letterSpacing: 4.0,
+                        fontSize: 22, letterSpacing: 4.4,
                         fontWeight: FontWeight.w700,
                       ))),
                   ],
@@ -83,65 +82,67 @@ class ShareCard extends StatelessWidget {
               ] else
                 Text('Mirrorly',
                   style: GoogleFonts.playfairDisplay(
-                    color: Colors.white,
-                    fontSize: 54, letterSpacing: -1.2,
-                    fontWeight: FontWeight.w600, height: 1,
+                    color: ShareCard.accentRed,
+                    fontSize: 72, letterSpacing: -1.6,
+                    fontWeight: FontWeight.w800, height: 1,
                   )),
 
-              const SizedBox(height: 24),
+              // Push pics down a little so the score row breathes.
+              const SizedBox(height: 40),
 
-              // ── 2 · IMAGE (Mirrorly wordmark overlaid top-left of NOW) ──
-              AspectRatio(
-                aspectRatio: 5 / 6,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Row(
-                    children: [
-                      Expanded(child: _half(
-                        bytes: beforeBytes, url: null,
-                        label: 'NOW', align: Alignment.bottomLeft,
-                        showBrandWordmark: true,   // brand lives on the NOW side
-                      )),
-                      Container(width: 1, color: Colors.white),
-                      Expanded(child: _half(
-                        bytes: null, url: afterUrl,
-                        label: 'FIXED', align: Alignment.bottomRight,
-                        showBrandWordmark: false,
-                      )),
-                    ],
+              // ── 2 · IMAGE (Mirrorly wordmark BIG + RED on NOW side) ──
+              // Flexible so the image shrinks if the bigger typography
+              // above/below eats into its room — never clips.
+              Flexible(
+                child: AspectRatio(
+                  aspectRatio: 5 / 6,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Row(
+                      children: [
+                        Expanded(child: _half(
+                          bytes: beforeBytes, url: null,
+                          label: 'NOW', align: Alignment.bottomLeft,
+                          showBrandWordmark: true,
+                        )),
+                        Container(width: 1, color: Colors.white),
+                        Expanded(child: _half(
+                          bytes: null, url: afterUrl,
+                          label: 'FIXED', align: Alignment.bottomRight,
+                          showBrandWordmark: false,
+                        )),
+                      ],
+                    ),
                   ),
                 ),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 38),
 
-              // ── 3 · TAGLINE ──
+              // ── 3 · TAGLINE — BIG italic serif quote. ──
               Center(
                 child: Text(tagline,
                   textAlign: TextAlign.center,
                   maxLines: 3, overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.playfairDisplay(
                     color: Colors.white,
-                    fontSize: 38, letterSpacing: -0.6,
+                    fontSize: 56, letterSpacing: -0.9,
                     fontStyle: FontStyle.italic,
-                    fontWeight: FontWeight.w500, height: 1.24,
+                    fontWeight: FontWeight.w500, height: 1.22,
                   )),
               ),
 
               const Spacer(),
 
-              // ── 4 · PROOF LINES ──
-              // Way bigger than before — these are the credit-line stack
-              // that reads at thumbnail size on a feed. 40pt Inter-800
-              // all-caps. On 1080×1920 this fills a sixth of the card.
+              // ── 4 · PROOF LINES — BIG caps credit stack. ──
               for (var i = 0; i < proofs.length; i++) ...[
                 Text(proofs[i].toUpperCase(),
                   style: GoogleFonts.inter(
                     color: Colors.white,
-                    fontSize: 40, letterSpacing: 1.8,
-                    fontWeight: FontWeight.w800, height: 1.25,
+                    fontSize: 60, letterSpacing: 2.2,
+                    fontWeight: FontWeight.w800, height: 1.22,
                   )),
-                if (i != proofs.length - 1) const SizedBox(height: 6),
+                if (i != proofs.length - 1) const SizedBox(height: 10),
               ],
 
               const SizedBox(height: 28),
@@ -185,18 +186,18 @@ class ShareCard extends StatelessWidget {
         else
           const ColoredBox(color: Color(0xFF0C0C0C)),
 
-        // Soft scrim along the top of the NOW half so the Mirrorly
-        // wordmark is legible over any skin tone / bright highlight.
+        // Soft scrim along the top of the NOW half so the big red
+        // "Mirrorly" wordmark reads over any skin tone or highlight.
         if (showBrandWordmark)
           Positioned(
-            left: 0, right: 0, top: 0, height: 78,
+            left: 0, right: 0, top: 0, height: 140,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(alpha: 0.55),
+                    Colors.black.withValues(alpha: 0.58),
                     Colors.transparent,
                   ],
                 ),
@@ -206,12 +207,21 @@ class ShareCard extends StatelessWidget {
 
         if (showBrandWordmark)
           Positioned(
-            left: 18, top: 16,
+            left: 22, top: 20,
             child: Text('Mirrorly',
               style: GoogleFonts.playfairDisplay(
-                color: Colors.white,
-                fontSize: 30, letterSpacing: -0.6,
-                fontWeight: FontWeight.w600, height: 1,
+                color: ShareCard.accentRed,
+                fontSize: 64, letterSpacing: -1.4,
+                fontWeight: FontWeight.w800, height: 1,
+                shadows: [
+                  // A touch of shadow so the wordmark reads even over
+                  // a bright forehead highlight.
+                  Shadow(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               )),
           ),
 
@@ -269,30 +279,30 @@ class _ScoreTransitionStatic extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
-          width: 160,
+          width: 220,
           child: Text('$currentScore',
             textAlign: TextAlign.center,
             style: GoogleFonts.playfairDisplay(
-              fontSize: 120, height: 1.0, letterSpacing: -3.6,
+              fontSize: 200, height: 1.0, letterSpacing: -6.0,
               color: Colors.white.withValues(alpha: 0.62),
               fontStyle: FontStyle.italic,
               fontWeight: FontWeight.w500,
             )),
         ),
-        const SizedBox(width: 44),
+        const SizedBox(width: 50),
         Text('→',
           style: GoogleFonts.inter(
             color: ShareCard.accentRed,
-            fontSize: 76, height: 1,
+            fontSize: 120, height: 1,
             fontWeight: FontWeight.w300,
           )),
-        const SizedBox(width: 44),
+        const SizedBox(width: 50),
         SizedBox(
-          width: 160,
+          width: 220,
           child: Text('$projectedScore',
             textAlign: TextAlign.center,
             style: GoogleFonts.playfairDisplay(
-              fontSize: 144, height: 1.0, letterSpacing: -4.0,
+              fontSize: 232, height: 1.0, letterSpacing: -6.6,
               color: Colors.white,
               fontStyle: FontStyle.italic,
               fontWeight: FontWeight.w700,
