@@ -45,6 +45,12 @@ class GeometryOverlayPainter extends CustomPainter {
   final String statusColor; // 'idle' | 'adjusting' | 'locked'
   final double holdProgress; // 0..1
 
+  // When true, swap LEFT/RIGHT in user-facing direction cues (rotate arrow +
+  // ticker text). Android front-cam preview is NOT auto-mirrored at the
+  // platform level the way iOS is, so the user perceives the opposite turn
+  // direction. Caller passes `Platform.isAndroid` here.
+  final bool mirrorLR;
+
   const GeometryOverlayPainter({
     required this.mesh,
     required this.phase,
@@ -55,6 +61,7 @@ class GeometryOverlayPainter extends CustomPainter {
     this.statusText = '',
     this.statusColor = 'idle',
     this.holdProgress = 0,
+    this.mirrorLR = false,
   });
 
   // ── Palette ───────────────────────────────────────────────────────────────
@@ -134,10 +141,13 @@ class GeometryOverlayPainter extends CustomPainter {
           _drawMeshDots(canvas, size, alphaScale: 0.3);
           _drawBoneStructure(canvas, size, dramatic: true);
         }
-        _drawRotateCue(canvas, size,
-          leftwards: phase == ScanPhase.rotateLeft);
+        // On Android, front-cam preview isn't auto-mirrored, so the user
+        // sees themselves the way a stranger would. Swap LEFT/RIGHT in the
+        // arrow direction + ticker text to match what they physically need.
+        final bool wantLeftCue = (phase == ScanPhase.rotateLeft) ^ mirrorLR;
+        _drawRotateCue(canvas, size, leftwards: wantLeftCue);
         _drawTopTicker(canvas, size,
-          phase == ScanPhase.rotateLeft
+          wantLeftCue
             ? '↺ TURN SLOWLY LEFT · PROFILE INCOMING'
             : '↻ TURN SLOWLY RIGHT · CAPTURING LAST ANGLE');
         break;

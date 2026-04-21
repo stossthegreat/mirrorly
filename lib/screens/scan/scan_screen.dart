@@ -236,6 +236,18 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     return Offset(nx, ny);
   }
 
+  // Front-cam preview is auto-mirrored on iOS at the platform level. Android
+  // shows the un-mirrored view, so when our internal logic wants the user to
+  // turn LEFT (subject's own left), the user perceives it as RIGHT in the
+  // preview. Swap the LEFT/RIGHT in user-facing strings on Android only.
+  String _dir(String iosLabel) {
+    if (!Platform.isAndroid) return iosLabel;
+    return iosLabel
+        .replaceAll('LEFT', '\u0001')
+        .replaceAll('RIGHT', 'LEFT')
+        .replaceAll('\u0001', 'RIGHT');
+  }
+
   Future<void> _processFrame(CameraImage image) async {
     if (_processing ||
         _phase == ScanPhase.capturing ||
@@ -357,27 +369,27 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
         // (= camera's right) → NEGATIVE yaw. This is the fix — previously
         // had signs flipped and users were told to turn the wrong way.
         if (_yawDeg > -18) {
-          nextStatus = 'TURN FURTHER LEFT';
+          nextStatus = _dir('TURN FURTHER LEFT');
           nextColor = 'adjusting';
         } else if (_yawDeg < -48) {
           nextStatus = 'TURN BACK A LITTLE';
           nextColor = 'adjusting';
         } else {
           inPosition = true;
-          nextStatus = 'HOLD STILL · LEFT';
+          nextStatus = _dir('HOLD STILL · LEFT');
           nextColor = 'locked';
         }
       } else if (rightProfileWanted) {
         // Subject's RIGHT shoulder = camera's left → POSITIVE yaw.
         if (_yawDeg < 18) {
-          nextStatus = 'TURN FURTHER RIGHT';
+          nextStatus = _dir('TURN FURTHER RIGHT');
           nextColor = 'adjusting';
         } else if (_yawDeg > 48) {
           nextStatus = 'TURN BACK A LITTLE';
           nextColor = 'adjusting';
         } else {
           inPosition = true;
-          nextStatus = 'HOLD STILL · RIGHT';
+          nextStatus = _dir('HOLD STILL · RIGHT');
           nextColor = 'locked';
         }
       } else if (_phase == ScanPhase.measuring) {
@@ -387,11 +399,11 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
         nextColor = 'locked';
       } else if (_phase == ScanPhase.rotateLeft) {
         inPosition = false;
-        nextStatus = 'TURN LEFT';
+        nextStatus = _dir('TURN LEFT');
         nextColor = 'adjusting';
       } else if (_phase == ScanPhase.rotateRight) {
         inPosition = false;
-        nextStatus = 'TURN RIGHT';
+        nextStatus = _dir('TURN RIGHT');
         nextColor = 'adjusting';
       }
 
@@ -715,6 +727,9 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
                   statusText:   _statusText,
                   statusColor:  _statusColor,
                   holdProgress: _holdProgress,
+                  // Front-cam preview behaves opposite on Android (no auto
+                  // mirror) — flag the painter to swap LEFT/RIGHT cues.
+                  mirrorLR:     Platform.isAndroid,
                 ),
               ),
             ),
