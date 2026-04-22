@@ -88,7 +88,7 @@ class _ProtocolScreenState extends State<ProtocolScreen> {
           Text('No active protocol.',
             style: AppTypography.h1.copyWith(fontSize: 26)),
           const SizedBox(height: 6),
-          Text('Your advisor will recommend one after the next scan — '
+          Text('The Mirror will recommend one after the next scan — '
                'tuned to your pulldown axis.',
             textAlign: TextAlign.center,
             style: AppTypography.body.copyWith(color: AppColors.textSecondary)),

@@ -135,8 +135,8 @@ class _PaywallScreenState extends State<PaywallScreen> {
               const SizedBox(height: 18),
               const _Point(
                 n: '3',
-                headline: 'FACE DOCTOR, ON CALL',
-                body: 'AI advisor that knows every inch of your anatomy. Every fix designed for your bones — not a generic.',
+                headline: 'THE MIRROR · ON CALL',
+                body: 'An AI that knows every inch of your anatomy. Every fix designed for your bones — not a generic.',
               ),
 
               const Spacer(),

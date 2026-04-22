@@ -68,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _advisorTab() {
-    if (_latest == null) return const _NoScanYet(forTab: 'Advisor');
+    if (_latest == null) return const _NoScanYet(forTab: 'The Mirror');
     return ChatScreen(
       geometry:  _latest!.geometry,
       imagePath: _latest!.capturedImagePath,
@@ -216,7 +216,7 @@ class _CheckInCard extends StatelessWidget {
     if (daysSince >= 3) {
       return (
         'CHECK-IN',
-        'Ask the advisor one thing you\'ve been wondering about your face.',
+        'Ask The Mirror one thing you\'ve been wondering about your face.',
         AppColors.accent,
       );
     }
@@ -464,7 +464,7 @@ class _NavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = const [
       ('Scan',     Icons.center_focus_strong_rounded),
-      ('Advisor',  Icons.auto_awesome),
+      ('Mirror',   Icons.auto_awesome),
       ('Progress', Icons.show_chart_rounded),
     ];
     return Container(

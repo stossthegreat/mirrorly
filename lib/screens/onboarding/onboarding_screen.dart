@@ -1,19 +1,21 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../theme/app_colors.dart';
-import '../../theme/app_typography.dart';
 
-/// Two-page sexy onboarding. Black canvas, red accents, white serif.
+/// Three-page onboarding. No animations, no custom painters. Every screen
+/// answers one question in under six seconds:
 ///
-/// Page 1 — WHAT WE DO       (the differentiator: real geometry, not a rating)
-/// Page 2 — WHAT YOU GET     (the promise: your real face, at its peak)
+///   Page 1 — THE SCAN     (MediaPipe · "we map every millimetre")
+///   Page 2 — THE SCORE    (two scores · bones + looks, both real)
+///   Page 3 — THE MIRROR   (AI that knows your face, advises + renders)
 ///
-/// Each page has a hero animated visual, a punchy headline, a 1-line sub,
-/// and a CTA. Page 2's CTA pushes to /paywall.
+/// Each page: red eyebrow label, huge headline, short sub, one big
+/// proof card that IS the visual. Big writing. Minimal copy. No reticle
+/// animations, no pulsing dots — the design sells itself.
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -24,6 +26,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pc = PageController();
   int _i = 0;
+  static const _pages = 3;
 
   @override
   void dispose() {
@@ -33,9 +36,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   void _next() {
     HapticFeedback.lightImpact();
-    if (_i == 0) {
-      _pc.animateToPage(1,
-        duration: const Duration(milliseconds: 480),
+    if (_i < _pages - 1) {
+      _pc.animateToPage(_i + 1,
+        duration: const Duration(milliseconds: 420),
         curve: Curves.easeOutCubic);
     } else {
       context.go('/paywall');
@@ -51,15 +54,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           children: [
             // ── Top bar: wordmark + page indicator ─────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
                       Text('Mirrorly',
-                        style: AppTypography.h1.copyWith(
-                          fontSize: 22, letterSpacing: -0.5, height: 1)),
+                        style: GoogleFonts.playfairDisplay(
+                          color: Colors.white,
+                          fontSize: 22, letterSpacing: -0.5, height: 1,
+                          fontWeight: FontWeight.w700,
+                        )),
                       const SizedBox(width: 6),
                       Container(
                         width: 4, height: 4,
@@ -70,10 +76,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ],
                   ),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      _PageDot(active: _i == 0),
-                      const SizedBox(width: 6),
-                      _PageDot(active: _i == 1),
+                      for (var p = 0; p < _pages; p++) ...[
+                        _PageDot(active: _i == p),
+                        if (p != _pages - 1) const SizedBox(width: 6),
+                      ],
                     ],
                   ),
                 ],
@@ -87,17 +95,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 physics: const ClampingScrollPhysics(),
                 onPageChanged: (i) => setState(() => _i = i),
                 children: const [
-                  _PageMeasure(),
-                  _PagePeak(),
+                  _PageScan(),
+                  _PageScore(),
+                  _PageMirror(),
                 ],
               ),
             ),
 
             // ── Bottom CTA ────────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
               child: SizedBox(
-                width: double.infinity, height: 56,
+                width: double.infinity, height: 58,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.red,
@@ -108,10 +117,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   onPressed: _next,
                   child: Text(
-                    _i == 0 ? 'CONTINUE' : 'BEGIN',
+                    _i == _pages - 1 ? 'BEGIN' : 'CONTINUE',
                     style: const TextStyle(
                       fontWeight: FontWeight.w900,
-                      fontSize: 15, letterSpacing: 2.4,
+                      fontSize: 15, letterSpacing: 2.6,
                     ),
                   ),
                 ),
@@ -124,198 +133,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-//  PAGE 1 — WHAT WE DO
-// ──────────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+//  SHARED PAGE LAYOUT — every onboarding page follows this shape so the
+//  cadence feels consistent: eyebrow, huge headline, one-line sub, proof
+//  card in the centre. No page breaks the rhythm.
+// ═══════════════════════════════════════════════════════════════════════════
+class _PageShell extends StatelessWidget {
+  final String eyebrow;     // "01 · THE SCAN"
+  final String headlineA;   // first line of the huge headline
+  final String headlineB;   // second line
+  final String sub;         // 1–2 sentences max
+  final Widget card;        // the proof card
 
-class _PageMeasure extends StatelessWidget {
-  const _PageMeasure();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 16),
-          Text('STEP 01 · ANALYSIS',
-            style: AppTypography.label.copyWith(
-              color: AppColors.red,
-              fontSize: 9, letterSpacing: 3.0,
-              fontWeight: FontWeight.w800,
-            )).animate().fadeIn(duration: 360.ms),
-
-          const SizedBox(height: 12),
-
-          Text('Every millimetre\nof your face.',
-            style: AppTypography.h1.copyWith(
-              color: Colors.white,
-              fontSize: 40, letterSpacing: -1.5, height: 1.05,
-            )).animate().fadeIn(delay: 120.ms, duration: 480.ms)
-              .slideY(begin: 0.06, end: 0, curve: Curves.easeOutCubic),
-
-          const SizedBox(height: 14),
-
-          Text(
-            'Sixteen surgical measurements pulled live from your front camera. '
-            'No rating. No filter. The real numbers — sub-millimetre.',
-            style: AppTypography.bodySmall.copyWith(
-              color: AppColors.textSecondary,
-              fontSize: 14, height: 1.5,
-            )).animate().fadeIn(delay: 280.ms, duration: 460.ms),
-
-          const Spacer(),
-
-          // Hero visual: animated face mesh reticle with measurement lines
-          Center(
-            child: SizedBox(
-              width: 260, height: 260,
-              child: const _MeasureReticle(),
-            ),
-          ),
-
-          const Spacer(flex: 2),
-
-          // Three credibility chips
-          _Row3Chips([
-            'Canthal tilt', 'Jaw angle °', 'Symmetry %',
-          ]),
-
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-}
-
-/// Animated face-scan reticle for page 1.
-class _MeasureReticle extends StatefulWidget {
-  const _MeasureReticle();
-
-  @override
-  State<_MeasureReticle> createState() => _MeasureReticleState();
-}
-
-class _MeasureReticleState extends State<_MeasureReticle>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(
-      duration: const Duration(seconds: 3),
-      vsync: this,
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, __) => CustomPaint(
-        painter: _MeasureReticlePainter(t: _c.value),
-      ),
-    );
-  }
-}
-
-class _MeasureReticlePainter extends CustomPainter {
-  final double t;
-  _MeasureReticlePainter({required this.t});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height / 2);
-    final r = size.shortestSide / 2;
-
-    // Outer red ring (faint)
-    canvas.drawCircle(c, r,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = AppColors.red.withValues(alpha: 0.30));
-
-    // Inner ring
-    canvas.drawCircle(c, r * 0.86,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.6
-        ..color = Colors.white.withValues(alpha: 0.10));
-
-    // Crosshair
-    canvas.drawLine(Offset(c.dx - r, c.dy), Offset(c.dx + r, c.dy),
-      Paint()..color = Colors.white.withValues(alpha: 0.10)..strokeWidth = 0.5);
-    canvas.drawLine(Offset(c.dx, c.dy - r), Offset(c.dx, c.dy + r),
-      Paint()..color = Colors.white.withValues(alpha: 0.10)..strokeWidth = 0.5);
-
-    // Sweep arc (rotating red wedge)
-    final sweepStart = t * 2 * math.pi;
-    canvas.drawArc(
-      Rect.fromCircle(center: c, radius: r),
-      sweepStart,
-      math.pi / 3,
-      false,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..strokeCap = StrokeCap.round
-        ..color = AppColors.red,
-    );
-
-    // Mesh dots (pulsing alpha)
-    final pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi);
-    final dotPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.38 + 0.42 * pulse);
-    final rng = math.Random(42);
-    for (int i = 0; i < 64; i++) {
-      final ang = rng.nextDouble() * 2 * math.pi;
-      final rad = (0.20 + rng.nextDouble() * 0.62) * r;
-      final p = Offset(c.dx + math.cos(ang) * rad, c.dy + math.sin(ang) * rad);
-      canvas.drawCircle(p, 1.1, dotPaint);
-    }
-
-    // Center red dot
-    canvas.drawCircle(c, 3, Paint()..color = AppColors.red);
-
-    // Pulsing aura
-    canvas.drawCircle(c, 6 + 3 * pulse,
-      Paint()..color = AppColors.red.withValues(alpha: 0.22 * (1 - pulse)));
-
-    // Tick marks around perimeter
-    for (int i = 0; i < 24; i++) {
-      final ang = i * math.pi / 12;
-      final inner = Offset(
-        c.dx + math.cos(ang) * (r - 8),
-        c.dy + math.sin(ang) * (r - 8));
-      final outer = Offset(
-        c.dx + math.cos(ang) * r,
-        c.dy + math.sin(ang) * r);
-      canvas.drawLine(inner, outer,
-        Paint()
-          ..color = (i % 6 == 0 ? AppColors.red : Colors.white)
-              .withValues(alpha: i % 6 == 0 ? 0.85 : 0.30)
-          ..strokeWidth = i % 6 == 0 ? 1.4 : 0.6);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_MeasureReticlePainter o) => o.t != t;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  PAGE 2 — WHAT YOU GET
-// ──────────────────────────────────────────────────────────────────────────
-
-class _PagePeak extends StatelessWidget {
-  const _PagePeak();
+  const _PageShell({
+    required this.eyebrow,
+    required this.headlineA,
+    required this.headlineB,
+    required this.sub,
+    required this.card,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -324,240 +160,477 @@ class _PagePeak extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 16),
-          Text('STEP 02 · TRANSFORM',
-            style: AppTypography.label.copyWith(
+          const SizedBox(height: 20),
+          Text(eyebrow,
+            style: GoogleFonts.inter(
               color: AppColors.red,
-              fontSize: 9, letterSpacing: 3.0,
+              fontSize: 10, letterSpacing: 3.2,
               fontWeight: FontWeight.w800,
-            )).animate().fadeIn(duration: 360.ms),
-
-          const SizedBox(height: 12),
-
-          Text('You.\nAt your peak.',
-            style: AppTypography.h1.copyWith(
-              color: Colors.white,
-              fontSize: 40, letterSpacing: -1.5, height: 1.05,
-            )).animate().fadeIn(delay: 120.ms, duration: 480.ms)
-              .slideY(begin: 0.06, end: 0, curve: Curves.easeOutCubic),
+            )).animate().fadeIn(duration: 320.ms),
 
           const SizedBox(height: 14),
 
-          Text(
-            'Your real face, rendered at its best. Hairstyles, beard, skin, glasses '
-            '— shaped by your bones, not a template.',
-            style: AppTypography.bodySmall.copyWith(
+          Text(headlineA,
+            style: GoogleFonts.playfairDisplay(
+              color: Colors.white,
+              fontSize: 44, height: 1.02,
+              letterSpacing: -1.6,
+              fontWeight: FontWeight.w700,
+            )).animate().fadeIn(delay: 120.ms, duration: 420.ms)
+              .slideY(begin: 0.06, end: 0, curve: Curves.easeOutCubic),
+
+          Text(headlineB,
+            style: GoogleFonts.playfairDisplay(
+              color: AppColors.red,
+              fontSize: 44, height: 1.02,
+              letterSpacing: -1.6,
+              fontStyle: FontStyle.italic,
+              fontWeight: FontWeight.w700,
+            )).animate().fadeIn(delay: 200.ms, duration: 420.ms)
+              .slideY(begin: 0.06, end: 0, curve: Curves.easeOutCubic),
+
+          const SizedBox(height: 18),
+
+          Text(sub,
+            style: GoogleFonts.inter(
               color: AppColors.textSecondary,
-              fontSize: 14, height: 1.5,
-            )).animate().fadeIn(delay: 280.ms, duration: 460.ms),
+              fontSize: 15, height: 1.5,
+              fontWeight: FontWeight.w400,
+            )).animate().fadeIn(delay: 280.ms, duration: 420.ms),
 
           const Spacer(),
 
-          // Hero visual: NOW | MAXED card animation
-          Center(
-            child: SizedBox(
-              width: 280, height: 220,
-              child: const _BeforeAfterAnimation(),
-            ),
-          ),
+          Center(child: card).animate()
+            .fadeIn(delay: 360.ms, duration: 520.ms)
+            .slideY(begin: 0.04, end: 0, curve: Curves.easeOutCubic),
 
           const Spacer(flex: 2),
-
-          _Row3Chips([
-            'Maximized', 'Try haircuts', 'Face doctor',
-          ]),
-
-          const SizedBox(height: 8),
         ],
       ),
     );
   }
 }
 
-/// Animated NOW | MAXED reveal for page 2.
-class _BeforeAfterAnimation extends StatefulWidget {
-  const _BeforeAfterAnimation();
-
-  @override
-  State<_BeforeAfterAnimation> createState() => _BeforeAfterAnimationState();
-}
-
-class _BeforeAfterAnimationState extends State<_BeforeAfterAnimation>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(
-      duration: const Duration(milliseconds: 2400),
-      vsync: this,
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
+// ═══════════════════════════════════════════════════════════════════════════
+//  PAGE 1 — THE SCAN
+//  Card: mask-face icon + three live measurement rows. The card IS the
+//  sales pitch — "we measure things no one else measures".
+// ═══════════════════════════════════════════════════════════════════════════
+class _PageScan extends StatelessWidget {
+  const _PageScan();
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, __) {
-        // Sweep the divider from 35% → 65% and back
-        final t = _c.value;
-        final sweep = 0.35 + 0.30 * (0.5 - 0.5 * math.cos(t * 2 * math.pi));
-        return CustomPaint(painter: _BeforeAfterPainter(split: sweep));
-      },
-    );
-  }
-}
-
-class _BeforeAfterPainter extends CustomPainter {
-  final double split;
-  _BeforeAfterPainter({required this.split});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final r = RRect.fromRectAndRadius(
-      Offset.zero & size, const Radius.circular(16));
-    canvas.save();
-    canvas.clipRRect(r);
-
-    // NOW side — muted greys
-    canvas.drawRect(
-      Rect.fromLTRB(0, 0, size.width * split, size.height),
-      Paint()..color = const Color(0xFF1B1B1B));
-    // Faint face silhouette on NOW
-    _drawSilhouette(canvas, size, lr: -1, color: Colors.white.withValues(alpha: 0.12));
-
-    // MAXED side — red wash + brighter silhouette
-    canvas.drawRect(
-      Rect.fromLTRB(size.width * split, 0, size.width, size.height),
-      Paint()..shader = LinearGradient(
-        begin: Alignment.topLeft, end: Alignment.bottomRight,
-        colors: [
-          AppColors.red.withValues(alpha: 0.18),
-          const Color(0xFF1B1B1B),
-        ],
-      ).createShader(
-          Rect.fromLTRB(size.width * split, 0, size.width, size.height)));
-    _drawSilhouette(canvas, size, lr: 1, color: AppColors.red.withValues(alpha: 0.85));
-
-    // Divider line
-    canvas.drawLine(
-      Offset(size.width * split, 0),
-      Offset(size.width * split, size.height),
-      Paint()..color = AppColors.red..strokeWidth = 1.4);
-
-    // Labels
-    _drawLabel(canvas, 'NOW',
-      Offset(10, 10), Colors.white60);
-    _drawLabel(canvas, 'MAXED',
-      Offset(size.width - 60, 10), AppColors.red, bold: true);
-
-    canvas.restore();
-
-    // Border
-    canvas.drawRRect(
-      r,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = AppColors.red.withValues(alpha: 0.55));
-  }
-
-  void _drawSilhouette(Canvas canvas, Size size,
-      {required int lr, required Color color}) {
-    // Simple oval head silhouette in each half
-    final half = size.width / 2;
-    final cx = lr < 0 ? half * 0.5 : size.width - half * 0.5;
-    final cy = size.height * 0.55;
-    final w = size.width * 0.18;
-    final h = size.height * 0.55;
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(cx, cy), width: w, height: h),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..color = color);
-    // Inner mesh dots
-    final rng = math.Random(lr < 0 ? 7 : 21);
-    for (int i = 0; i < 14; i++) {
-      final ang = rng.nextDouble() * 2 * math.pi;
-      final rad = rng.nextDouble() * w / 2 * 0.85;
-      canvas.drawCircle(
-        Offset(cx + math.cos(ang) * rad, cy + math.sin(ang) * rad * 1.6),
-        1.1,
-        Paint()..color = color);
-    }
-  }
-
-  void _drawLabel(Canvas canvas, String text, Offset at, Color color,
-      {bool bold = false}) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: color,
-          fontSize: 10, letterSpacing: 2.4,
-          fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
+    return _PageShell(
+      eyebrow:   '01 · THE SCAN',
+      headlineA: 'We map every',
+      headlineB: 'millimetre.',
+      sub:       'One selfie. Sixteen surgical measurements in six seconds.',
+      card: _ProofCard(
+        header: 'WHAT WE MEASURE',
+        hero: Container(
+          width: 60, height: 60,
+          decoration: BoxDecoration(
+            color: AppColors.red.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.red.withValues(alpha: 0.55), width: 0.8),
+          ),
+          child: const Icon(Icons.face_retouching_natural_rounded,
+            size: 34, color: AppColors.red),
         ),
+        heroLabel: 'PRECISION\nFACE MAPPING',
+        rows: const [
+          ('CANTHAL TILT', '2.4°'),
+          ('JAW ANGLE',    '118°'),
+          ('SYMMETRY',     '87 / 100'),
+        ],
       ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, at);
+    );
   }
-
-  @override
-  bool shouldRepaint(_BeforeAfterPainter o) => o.split != split;
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-//  SHARED
-// ──────────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+//  PAGE 2 — THE SCORE
+//  Card: side-by-side scores — BONES (our geometry) and LOOKS (GPT-4 honest
+//  vision rating). Proves the moat: two numbers no one else runs.
+// ═══════════════════════════════════════════════════════════════════════════
+class _PageScore extends StatelessWidget {
+  const _PageScore();
 
-class _Row3Chips extends StatelessWidget {
-  final List<String> labels;
-  const _Row3Chips(this.labels);
+  @override
+  Widget build(BuildContext context) {
+    return _PageShell(
+      eyebrow:   '02 · THE SCORE',
+      headlineA: 'Two scores.',
+      headlineB: 'Both honest.',
+      sub:       'Your bone structure and your real-world looks, measured '
+                 'separately. No flattery.',
+      card: const _TwoScoreCard(bones: 74, looks: 58),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PAGE 3 — THE MIRROR
+//  Card: a specimen chat bubble from The Mirror + the GENERATE IMAGE button
+//  underneath — the exact real UI they'll see once paid.
+// ═══════════════════════════════════════════════════════════════════════════
+class _PageMirror extends StatelessWidget {
+  const _PageMirror();
+
+  @override
+  Widget build(BuildContext context) {
+    return _PageShell(
+      eyebrow:   '03 · THE MIRROR',
+      headlineA: 'The AI that',
+      headlineB: 'knows your face.',
+      sub:       'It reads your bones, tells you what suits you, and renders '
+                 'you wearing it.',
+      card: const _MirrorCard(),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PROOF CARDS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Generic proof card: hero icon + header row, stacked measurement rows.
+/// Used by page 1. Wide, tall, black with a red glow ring.
+class _ProofCard extends StatelessWidget {
+  final String header;
+  final Widget hero;
+  final String heroLabel;
+  final List<(String, String)> rows;
+
+  const _ProofCard({
+    required this.header,
+    required this.hero,
+    required this.heroLabel,
+    required this.rows,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E0E12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.red.withValues(alpha: 0.35), width: 0.8),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.red.withValues(alpha: 0.18),
+            blurRadius: 30, spreadRadius: -6),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              hero,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(header,
+                      style: GoogleFonts.inter(
+                        color: AppColors.red,
+                        fontSize: 9.5, letterSpacing: 2.8,
+                        fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    Text(heroLabel,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 16, height: 1.1,
+                        letterSpacing: 0.4,
+                        fontWeight: FontWeight.w800)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Container(height: 1, color: Colors.white.withValues(alpha: 0.06)),
+          const SizedBox(height: 14),
+          for (var i = 0; i < rows.length; i++) ...[
+            _ProofRow(label: rows[i].$1, value: rows[i].$2),
+            if (i != rows.length - 1) const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ProofRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _ProofRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        for (final l in labels) _Chip(l),
+        Text(label,
+          style: GoogleFonts.inter(
+            color: AppColors.textSecondary,
+            fontSize: 12, letterSpacing: 1.8,
+            fontWeight: FontWeight.w700)),
+        Text(value,
+          style: GoogleFonts.playfairDisplay(
+            color: Colors.white,
+            fontSize: 18, height: 1,
+            fontStyle: FontStyle.italic,
+            fontWeight: FontWeight.w600)),
       ],
-    ).animate().fadeIn(delay: 600.ms, duration: 400.ms);
+    );
   }
 }
 
-class _Chip extends StatelessWidget {
-  final String label;
-  const _Chip(this.label);
+// ──── Two-score card (page 2) ──────────────────────────────────────────────
+
+class _TwoScoreCard extends StatelessWidget {
+  final int bones;
+  final int looks;
+  const _TwoScoreCard({required this.bones, required this.looks});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
       decoration: BoxDecoration(
-        color: AppColors.redGlow,
-        border: Border.all(color: AppColors.red.withValues(alpha: 0.55)),
+        color: const Color(0xFF0E0E12),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.red.withValues(alpha: 0.35), width: 0.8),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.red.withValues(alpha: 0.18),
+            blurRadius: 30, spreadRadius: -6),
+        ],
       ),
-      child: Text(label.toUpperCase(),
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 9.5, letterSpacing: 1.6,
-          fontWeight: FontWeight.w800,
-        ),
+      child: Row(
+        children: [
+          Expanded(child: _ScoreCol(
+            label: 'BONE STRUCTURE',
+            value: bones,
+            tint: Colors.white,
+            italic: false,
+          )),
+          Container(
+            width: 1, height: 100,
+            color: Colors.white.withValues(alpha: 0.08)),
+          Expanded(child: _ScoreCol(
+            label: 'HONEST LOOKS',
+            value: looks,
+            tint: AppColors.red,
+            italic: true,
+          )),
+        ],
       ),
     );
   }
 }
 
+class _ScoreCol extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color tint;
+  final bool italic;
+  const _ScoreCol({
+    required this.label, required this.value,
+    required this.tint, required this.italic,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(label,
+          style: GoogleFonts.inter(
+            color: AppColors.textTertiary,
+            fontSize: 9, letterSpacing: 2.6,
+            fontWeight: FontWeight.w800)),
+        const SizedBox(height: 10),
+        Text('$value',
+          style: GoogleFonts.playfairDisplay(
+            color: tint,
+            fontSize: 64, height: 1,
+            letterSpacing: -2.2,
+            fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+            fontWeight: FontWeight.w700,
+            shadows: italic ? [
+              Shadow(
+                color: tint.withValues(alpha: 0.35),
+                blurRadius: 22),
+            ] : null,
+          )),
+        const SizedBox(height: 4),
+        Text('/ 100',
+          style: GoogleFonts.inter(
+            color: AppColors.textTertiary,
+            fontSize: 10, letterSpacing: 2.0,
+            fontWeight: FontWeight.w700)),
+      ],
+    );
+  }
+}
+
+// ──── The Mirror card (page 3) ─────────────────────────────────────────────
+
+/// Static snapshot of the real chat UI — a specimen assistant bubble from
+/// The Mirror plus the GENERATE IMAGE button underneath. Shows exactly
+/// what the paid experience looks like.
+class _MirrorCard extends StatelessWidget {
+  const _MirrorCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0E0E12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppColors.red.withValues(alpha: 0.35), width: 0.8),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.red.withValues(alpha: 0.18),
+            blurRadius: 30, spreadRadius: -6),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Mirror header row
+          Row(
+            children: [
+              Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(
+                  color: AppColors.red.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.red.withValues(alpha: 0.55), width: 0.8),
+                ),
+                child: const Center(
+                  child: Icon(Icons.auto_awesome_rounded,
+                    size: 15, color: AppColors.red),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text('THE MIRROR',
+                style: GoogleFonts.inter(
+                  color: AppColors.red,
+                  fontSize: 10, letterSpacing: 2.8,
+                  fontWeight: FontWeight.w800)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text('LIVE',
+                  style: GoogleFonts.inter(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontSize: 8, letterSpacing: 1.6,
+                    fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Specimen reply bubble
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: const BorderRadius.only(
+                topLeft:  Radius.circular(6),
+                topRight: Radius.circular(14),
+                bottomLeft: Radius.circular(14),
+                bottomRight: Radius.circular(14),
+              ),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.08), width: 0.8),
+            ),
+            child: RichText(
+              text: TextSpan(
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 14, height: 1.45,
+                  fontWeight: FontWeight.w400),
+                children: [
+                  TextSpan(
+                    text: 'Your jaw angle is ',
+                  ),
+                  TextSpan(
+                    text: '124°',
+                    style: GoogleFonts.playfairDisplay(
+                      color: AppColors.red,
+                      fontSize: 15, height: 1,
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.w700)),
+                  TextSpan(
+                    text: ' — soft side. A mid-fade with 4cm textured crop, '
+                          'side-parted off the stronger cheekbone, compresses '
+                          'the length and sharpens the read.',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Fake GENERATE IMAGE button — visual only
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                colors: [Color(0xFFE8222A), Color(0xFFB31018)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.red.withValues(alpha: 0.6), width: 0.8),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.red.withValues(alpha: 0.35),
+                  blurRadius: 18, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.auto_fix_high_rounded,
+                  size: 14, color: Colors.white),
+                const SizedBox(width: 8),
+                Text('GENERATE IMAGE',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 12, letterSpacing: 2.2,
+                    fontWeight: FontWeight.w900)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 class _PageDot extends StatelessWidget {
   final bool active;
   const _PageDot({required this.active});
@@ -566,9 +639,9 @@ class _PageDot extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
-      width: active ? 18 : 6, height: 6,
+      width: active ? 20 : 6, height: 6,
       decoration: BoxDecoration(
-        color: active ? AppColors.red : Colors.white.withValues(alpha: 0.25),
+        color: active ? AppColors.red : Colors.white.withValues(alpha: 0.22),
         borderRadius: BorderRadius.circular(3),
       ),
     );
