@@ -185,30 +185,55 @@ function classify(s) {
 }
 
 /**
- * Descriptor-first prompt. Four ordered beats per the community-validated
- * Nano Banana hair-swap template (Skywork + multiple Reddit threads):
+ * Descriptor-first prompt. Five ordered beats, tuned for Nano Banana
+ * (Gemini 2.5 Flash Image):
  *
- *   1. Subject naming        — "The person in this photo"
- *   2. The ONE change        — "Give them [hero grooming change]"
- *   3. Positive preserve     — list what must stay the same (not negation)
- *   4. Lighting/background   — keep everything else identical
+ *   1. Subject naming                — "The person in this photo"
+ *   2. The ONE hero change           — "Give them [heroChange]"
+ *   3. Grooming baseline (ALWAYS)    — clean healthy skin, styled hair,
+ *                                      neat facial hair if present
+ *   4. Identity preserve clause      — bones / proportions / age / ethnicity
+ *   5. Environment preserve clause   — lighting, background, pose
  *
- * KEY — "apparent age" listed in the preserve clause. This is the measured
- * fix for Flux/Gemini's +2y male age-drift bias (arxiv 2502.03420): by
- * positively preserving age, the model clamps to the source age instead
- * of defaulting older.
+ * Why the grooming baseline (new in this version): one of two things is
+ * always true of the user — (a) the hero change IS grooming, in which
+ * case the baseline reinforces it, or (b) the hero is non-grooming
+ * (glasses, expression), in which case we still want the twin to look
+ * their best instead of keeping original bed hair / stubble. The model
+ * pairs a skin cleanup + fresh styling with the hero without bleeding
+ * into bone reshaping when the identity clause is specific.
+ *
+ * "Apparent age" sits at the top of the preserve clause — documented
+ * fix for Flux/Gemini's +2y male age-drift (arxiv 2502.03420). Without
+ * it, the model nudges older even when the hero change is neutral.
+ *
+ * "Clean natural skin texture" (vs. the old "do not smooth the skin")
+ * tells the model to clean up acne, redness, uneven tone WITHOUT going
+ * airbrushed/plastic — which was the old failure mode.
  */
 function buildPrompt(heroChange) {
   return (
     `The person in this photo. Give them ${heroChange}. ` +
-    `Match their head shape exactly. ` +
-    `Keep the same face, skin tone, skin texture, jawline, nose shape, ` +
-    `eye shape, eye colour, eyebrows, lips, expression, apparent age, ` +
-    `and ethnicity — all exactly as in the original. ` +
-    `Keep the same lighting, same background, same framing, same camera ` +
-    `angle and same pose. Natural shadows. ` +
-    `Photorealistic. Do not smooth the skin. Do not age the face. ` +
-    `Do not alter any facial feature other than the single change specified.`
+
+    // Grooming baseline — applied on every twin regardless of hero
+    `At the same time, make them look their absolute best: ` +
+    `clean, clear, healthy skin with even tone — no acne, no blemishes, ` +
+    `no redness, no visible pores — but keep natural skin texture ` +
+    `(not airbrushed, not plastic, not smoothed). ` +
+    `Give them freshly-cut and cleanly-styled hair. ` +
+    `If they have facial hair, keep it neatly groomed with clean lines ` +
+    `and a tight neckline. Groomed eyebrows, no stragglers. ` +
+
+    // Identity preserve — non-negotiable, positively framed
+    `Keep their apparent age, face shape, bone structure, jawline, ` +
+    `cheekbones, nose shape, eye shape, eye colour, lip shape, ` +
+    `expression, and ethnicity — exactly as in the original. ` +
+    `Do not reshape any bones. Do not age the face. Do not alter ` +
+    `identity. ` +
+
+    // Environment preserve — no scene drift
+    `Keep the same lighting, background, framing, camera angle, and ` +
+    `pose. Natural shadows. Photorealistic.`
   );
 }
 

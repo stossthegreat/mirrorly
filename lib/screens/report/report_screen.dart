@@ -774,12 +774,23 @@ class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
           ? _localUrl!
           : widget.maximizedImageUrl;
 
-  /// Fire /maximize directly. No re-analysis — the fixes we got from the
-  /// original /scan are still valid. This just asks the backend to render
-  /// the hero image again, now that Replicate is (hopefully) healthy.
-  Future<void> _retryMaximize() async {
+  /// Single tap handler for the APPLY ALL FIXES button. Handles both
+  /// cases transparently:
+  ///   · URL already present (normal scan) → reveal the hero image.
+  ///   · URL empty (Replicate was down during /scan) → fire /maximize
+  ///     right here, wait, then reveal. Same button, same interaction —
+  ///     the user never sees a separate "retry" card.
+  Future<void> _onApplyTap() async {
     if (_retrying) return;
-    HapticFeedback.mediumImpact();
+    HapticFeedback.heavyImpact();
+
+    // Fast path — we already have a URL, just reveal it.
+    if (_effectiveUrl.isNotEmpty) {
+      setState(() => _applied = true);
+      return;
+    }
+
+    // Slow path — render on demand.
     setState(() { _retrying = true; _retryError = null; });
     try {
       final url = await MirrorApiService.maximizeOnly(
@@ -790,7 +801,7 @@ class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
       setState(() {
         _localUrl = url;
         _retrying = false;
-        _applied = true; // auto-reveal since the user just asked for it
+        _applied  = true; // reveal immediately; the tap was the commit
       });
     } catch (err) {
       if (!mounted) return;
@@ -822,17 +833,8 @@ class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
   Widget build(BuildContext context) {
     final url = _effectiveUrl;
 
-    // ─── A) Hero URL empty — retry path (Replicate was down during /scan) ──
-    if (url.isEmpty) {
-      return _RetryHeroCard(
-        retrying: _retrying,
-        error:    _retryError,
-        onRetry:  _retryMaximize,
-      );
-    }
-
-    // ─── B) Hero unlocked — final form shown ────────────────────────────
-    if (_applied) {
+    // ─── Hero revealed — final form ─────────────────────────────────────
+    if (_applied && url.isNotEmpty) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(Sp.md),
@@ -875,40 +877,67 @@ class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
             duration: 450.ms, curve: Curves.easeOutBack);
     }
 
-    // ─── C) Primary CTA — Apply all fixes ────────────────────────────────
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.heavyImpact();
-          setState(() => _applied = true);
-        },
-        borderRadius: BorderRadius.circular(Rd.lg),
-        child: Container(
-          width: double.infinity, height: 58,
-          decoration: BoxDecoration(
-            color: AppColors.red,
+    // ─── CTA — Apply all fixes (same button, both paths) ────────────────
+    // When url is present, tap → instant reveal.
+    // When url is empty,  tap → fire /maximize in-place → reveal on
+    // success. Same visual affordance either way; the only surface-level
+    // difference is the spinner during the slow path. The old separate
+    // "retry card" is gone — users get one button, one interaction.
+    return Column(
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _retrying ? null : _onApplyTap,
             borderRadius: BorderRadius.circular(Rd.lg),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.red.withValues(alpha: 0.45),
-                blurRadius: 22, offset: const Offset(0, 6)),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.auto_awesome,
-                size: 18, color: AppColors.base),
-              const SizedBox(width: 10),
-              Text('APPLY ALL FIXES',
-                style: AppTypography.label.copyWith(
-                  color: AppColors.base, letterSpacing: 3.0, fontSize: 13,
-                  fontWeight: FontWeight.w900)),
-            ],
+            child: Container(
+              width: double.infinity, height: 58,
+              decoration: BoxDecoration(
+                color: AppColors.red,
+                borderRadius: BorderRadius.circular(Rd.lg),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.red.withValues(alpha: 0.45),
+                    blurRadius: 22, offset: const Offset(0, 6)),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_retrying) ...[
+                    const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                        color: AppColors.base, strokeWidth: 2.2)),
+                    const SizedBox(width: 12),
+                    Text('RENDERING…',
+                      style: AppTypography.label.copyWith(
+                        color: AppColors.base, letterSpacing: 3.0,
+                        fontSize: 13, fontWeight: FontWeight.w900)),
+                  ] else ...[
+                    const Icon(Icons.auto_awesome,
+                      size: 18, color: AppColors.base),
+                    const SizedBox(width: 10),
+                    Text('APPLY ALL FIXES',
+                      style: AppTypography.label.copyWith(
+                        color: AppColors.base, letterSpacing: 3.0,
+                        fontSize: 13, fontWeight: FontWeight.w900)),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
-      ),
+        // Retry error surfaces just below the button — stays visible on
+        // the same screen as the CTA so the user can tap again without
+        // scrolling or navigating.
+        if (_retryError != null) ...[
+          const SizedBox(height: 8),
+          Text(_retryError!,
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.signalAmber, fontSize: 11.5)),
+        ],
+      ],
     );
   }
 
@@ -918,75 +947,6 @@ class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
     child: Text('Maximized render unavailable',
       style: AppTypography.bodySmall.copyWith(color: AppColors.textMuted)),
   );
-}
-
-// ── Retry hero card — shown when /scan returned an empty hero url ──────────
-class _RetryHeroCard extends StatelessWidget {
-  final bool retrying;
-  final String? error;
-  final VoidCallback onRetry;
-  const _RetryHeroCard({
-    required this.retrying, required this.error, required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(Sp.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface1,
-        borderRadius: BorderRadius.circular(Rd.xl),
-        border: Border.all(
-          color: AppColors.red.withValues(alpha: 0.35), width: 0.8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('HERO RENDER · PENDING',
-            style: AppTypography.label.copyWith(
-              color: AppColors.red, letterSpacing: 2.8, fontSize: 10,
-              fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          Text('Image service was busy.',
-            style: AppTypography.h3.copyWith(fontSize: 16)),
-          const SizedBox(height: 4),
-          Text('Your analysis is complete — the hero image didn\'t '
-               'finish rendering. Tap to try again without re-scanning.',
-            style: AppTypography.bodySmall.copyWith(
-              color: AppColors.textSecondary, fontSize: 12.5, height: 1.5)),
-          const SizedBox(height: Sp.md),
-          SizedBox(
-            width: double.infinity, height: 50,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.red,
-                foregroundColor: AppColors.base,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(Rd.lg)),
-                elevation: 0,
-              ),
-              onPressed: retrying ? null : onRetry,
-              child: retrying
-                  ? const SizedBox(
-                      width: 20, height: 20,
-                      child: CircularProgressIndicator(
-                        color: AppColors.base, strokeWidth: 2))
-                  : const Text('Generate hero image',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14, letterSpacing: 0.4)),
-            ),
-          ),
-          if (error != null) ...[
-            const SizedBox(height: 8),
-            Text(error!,
-              style: AppTypography.bodySmall.copyWith(
-                color: AppColors.signalAmber, fontSize: 11.5)),
-          ],
-        ],
-      ),
-    );
-  }
 }
 
 class _ConsultCard extends StatelessWidget {
