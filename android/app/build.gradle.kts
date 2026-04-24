@@ -11,6 +11,11 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Core library desugaring is required by `flutter_local_notifications`
+        // (and any plugin targeting java.time on pre-API-26 devices). Without
+        // this, `flutter build apk --release` fails on checkReleaseAarMetadata:
+        //   ":flutter_local_notifications requires core library desugaring".
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -60,4 +65,10 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Required for `isCoreLibraryDesugaringEnabled = true` above.
+    // Version 2.0.4+ is the one flutter_local_notifications documents.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
