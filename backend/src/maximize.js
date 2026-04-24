@@ -67,18 +67,24 @@ export async function maximize({ imageBase64, brief }) {
 
   console.log(`[maximize] heroChange="${heroChange}" (ranked=${ranked.length})`);
 
-  // Stage 1+2 — primary edit via Nano Banana (retry on 429, 5xx, timeout)
+  // Stage 1+2 — primary edit via Nano Banana. Retry on EVERY error
+  // (not just transient): content-moderation false-positives, weird
+  // Replicate 4xxs on valid payloads, and unclassified failures all
+  // used to throw here and cascade up to a "Server hiccup" screen.
+  // User's explicit ask: never fail. Retry 5 times; the Flutter
+  // client will retry the whole request if we somehow still throw.
   const editStart = Date.now();
   const editUrl = await runWithRetry(
     () => runEdit({ imageDataUri: inputDataUri, prompt }),
-    { label: 'edit', maxAttempts: 3 },
+    { label: 'edit', maxAttempts: 5, retryAll: true },
   );
   console.log(`[maximize] edit ok: ${Date.now() - editStart}ms`);
 
   // Stage 3 — face-swap original → edit (identity guarantee).
-  // Also retried — face-swap transient 5xxs were silently degrading
-  // identity. If all retries fail we fall back to the edit output
-  // rather than crashing the whole /scan.
+  // Retried on all errors. If all retries fail we fall back to the
+  // edit output rather than crashing the whole /scan — identity will
+  // drift slightly but the user still gets a usable twin, which is
+  // infinitely better than an empty hero card.
   let finalUrl = editUrl;
   const swapStart = Date.now();
   try {
@@ -87,13 +93,10 @@ export async function maximize({ imageBase64, brief }) {
         editedUrl:   editUrl,
         originalUri: inputDataUri,
       }),
-      { label: 'swap', maxAttempts: 3 },
+      { label: 'swap', maxAttempts: 4, retryAll: true },
     );
     console.log(`[maximize] swap ok: ${Date.now() - swapStart}ms`);
   } catch (e) {
-    // Face-swap failed after retries. Serve the edit as-is rather than
-    // error the whole scan. Identity will drift slightly but the user
-    // still gets a usable twin.
     console.warn(`[maximize] swap FAILED after retries (${Date.now() - swapStart}ms): ${String(e?.message ?? e)}`);
   }
 
@@ -122,7 +125,7 @@ export async function maximize({ imageBase64, brief }) {
  * Backoff: respects Retry-After hint if present, else exponential
  * (3s, 6s, 12s) capped at 30s.
  */
-async function runWithRetry(fn, { label, maxAttempts = 3 } = {}) {
+async function runWithRetry(fn, { label, maxAttempts = 3, retryAll = false } = {}) {
   let lastErr;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -130,17 +133,23 @@ async function runWithRetry(fn, { label, maxAttempts = 3 } = {}) {
     } catch (err) {
       lastErr = err;
       const msg = String(err?.message ?? err);
+      // retryAll = retry every error, not just the ones we classified
+      // as transient. Trade-off: a genuinely broken payload will waste
+      // all attempts — but we'd rather waste retries than throw a
+      // recoverable failure up to the user. For the ones we DO know
+      // are transient, the wait honours Retry-After; for everything
+      // else we use a plain exponential schedule.
       const transient = isTransient(msg);
-      if (!transient || attempt >= maxAttempts) {
+      const shouldRetry = retryAll || transient;
+      if (!shouldRetry || attempt >= maxAttempts) {
         console.error(`[${label}] failed attempt ${attempt}/${maxAttempts} (terminal): ${msg}`);
         throw err;
       }
-      // Respect Retry-After if the error body surfaced it, else
-      // exponential with a floor of 3s and cap of 30s.
       const retryAfter = msg.match(/retry_after"?\s*:\s*(\d+)/);
       const waitSec    = retryAfter ? Number(retryAfter[1]) : Math.pow(2, attempt) * 3;
       const waitMs     = Math.min(Math.max(waitSec, 3), 30) * 1000;
-      console.warn(`[${label}] transient failure attempt ${attempt}/${maxAttempts}: "${msg.slice(0, 200)}" — waiting ${waitMs}ms`);
+      const kind = transient ? 'transient' : 'unclassified';
+      console.warn(`[${label}] ${kind} failure attempt ${attempt}/${maxAttempts}: "${msg.slice(0, 200)}" — waiting ${waitMs}ms`);
       await new Promise(r => setTimeout(r, waitMs));
     }
   }

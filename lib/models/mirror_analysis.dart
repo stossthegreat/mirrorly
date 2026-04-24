@@ -98,4 +98,14 @@ class MirrorAnalysis {
           .toList(),
     );
   }
+
+  /// Immutable update — used when the report page backfills a hero URL
+  /// after the initial /scan returned empty (Replicate hiccupped and
+  /// we retried /maximize in the background). Everything else stays
+  /// the same; only the hero render swaps in.
+  MirrorAnalysis copyWithMaximizedImageUrl(String url) => MirrorAnalysis(
+    report:            report,
+    maximizedImageUrl: url,
+    intermediateUrls:  intermediateUrls,
+  );
 }

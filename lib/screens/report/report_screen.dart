@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -48,9 +49,8 @@ class ReportScreen extends StatefulWidget {
 
 class _ReportScreenState extends State<ReportScreen> {
   MirrorAnalysis? _analysis;
-  String? _error;
   // Populated once the scan image is persisted. Passed to chat/tryon so the
-  // advisor can fire Flux renders inline using the real scan image.
+  // advisor can fire renders inline using the real scan image.
   String? _savedImagePath;
   // GPT-4o Vision honest-looks rating. Fires in parallel with /scan so
   // the added latency is absorbed. Null = model refused (rare) and the
@@ -82,35 +82,60 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Future<void> _run() async {
-    try {
-      // Fire /scan and /rate in parallel. Rate is ~3s, scan is ~10s, so
-      // running concurrently keeps the perceived loading time flat.
-      // Rate degrades gracefully to null on refusal / failure — the
-      // report still renders in geometry-only mode.
-      final imageB64 = base64Encode(widget.imageBytes);
+    // Fire /scan and /rate in parallel. Rate is ~3s, scan is ~10s, so
+    // running concurrently keeps the perceived loading time flat.
+    //
+    // Failure handling: MirrorApiService.scan retries FOREVER internally
+    // (see _retryForever in that service). There's no catch path here
+    // because there's nothing to catch — the service only returns on
+    // success. Honest rating degrades gracefully to null on refusal.
+    //
+    // If the backend returns a scan with an empty maximizedImageUrl
+    // (Replicate glitched on the hero during analyse), we silently fire
+    // /maximize again in the background and backfill before revealing
+    // the report. The user never sees an empty hero card.
+    final imageB64 = base64Encode(widget.imageBytes);
 
-      final scanFuture   = MirrorApiService.scan(
-        imageBytes:  widget.imageBytes,
-        geometry:    widget.geometry,
-        extraImages: widget.extraImages,
-      );
-      final honestFuture = HonestRatingService.rate(imageBase64: imageB64);
+    final scanFuture   = MirrorApiService.scan(
+      imageBytes:  widget.imageBytes,
+      geometry:    widget.geometry,
+      extraImages: widget.extraImages,
+    );
+    final honestFuture = HonestRatingService.rate(imageBase64: imageB64);
 
-      final results = await Future.wait<dynamic>([scanFuture, honestFuture]);
-      final result = results[0] as MirrorAnalysis;
-      final honest = results[1] as HonestRating?;
+    final results = await Future.wait<dynamic>([scanFuture, honestFuture]);
+    var result  = results[0] as MirrorAnalysis;
+    final honest = results[1] as HonestRating?;
 
-      if (mounted) {
-        setState(() {
-          _analysis = result;
-          _honest   = honest;
-        });
+    // If the hero URL came back empty, auto-rerun /maximize until we
+    // have one. maximizeOnly retries forever so this call is guaranteed
+    // to return a usable URL (or keep trying silently while the user
+    // stares at the loading screen).
+    if (result.maximizedImageUrl.trim().isEmpty) {
+      final improve = result.report.fixes
+          .map((f) => f.visualRequest.isNotEmpty
+              ? f.visualRequest
+              : f.title)
+          .toList();
+      try {
+        final url = await MirrorApiService.maximizeOnly(
+          imageBytes: widget.imageBytes,
+          improve:    improve,
+        );
+        result = result.copyWithMaximizedImageUrl(url);
+      } catch (_) {
+        // maximizeOnly retries forever; if it somehow threw we still
+        // proceed with the empty URL — the hero widget will self-heal.
       }
-      // Persist the scan so it lights up Progress + Advisor tabs.
-      await _persistScan(result);
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
     }
+
+    if (!mounted) return;
+    setState(() {
+      _analysis = result;
+      _honest   = honest;
+    });
+    // Persist the scan so it lights up Progress + Advisor tabs.
+    await _persistScan(result);
   }
 
   Future<void> _persistScan(MirrorAnalysis a) async {
@@ -168,40 +193,11 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Widget _buildLoading() {
-    if (_error != null) {
-      // Translate raw backend errors into a human message. We never show
-      // "Backend 500: {"error":"Request to ...api.replicate.com... 429
-      // Too Many Requests: ..."}" to the user — that's an internal
-      // stack-dump and it scares people.
-      final friendly = _friendlyError(_error!);
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(friendly.title, style: AppTypography.h3.copyWith(
-                color: AppColors.signalRed)),
-              const SizedBox(height: 12),
-              Text(friendly.body,
-                style: AppTypography.bodySmall,
-                textAlign: TextAlign.center),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () { setState(() => _error = null); _run(); },
-                child: const Text('Try again'),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => context.go('/home'),
-                child: const Text('Back to home'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
+    // No error screen, ever. MirrorApiService.scan and maximizeOnly
+    // retry forever; they only return on success. If the user ever
+    // navigates here without connectivity, they'll see the loading
+    // state until connectivity returns — but they never see a
+    // "Server hiccup" or "Try again" prompt.
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -232,41 +228,6 @@ class _ReportScreenState extends State<ReportScreen> {
     if (score >= 70) return 28;
     if (score >= 60) return 44;
     return 62;
-  }
-
-  /// Convert backend stack-dump errors into a human message. Raw
-  /// backend JSON never reaches the user — they see a clean sentence
-  /// plus Try Again. 429s get their own copy since they're transient.
-  ({String title, String body}) _friendlyError(String raw) {
-    final lower = raw.toLowerCase();
-    if (lower.contains('429') || lower.contains('too many requests') ||
-        lower.contains('throttled') || lower.contains('rate limit')) {
-      return (
-        title: 'Slight wait',
-        body: 'We\'re rendering a lot of scans right now. '
-              'Give it a few seconds and try again.',
-      );
-    }
-    if (lower.contains('timeout') || lower.contains('timed out') ||
-        lower.contains('socket')) {
-      return (
-        title: 'Connection dropped',
-        body: 'Check your connection and try again. '
-              'Your scan is safe.',
-      );
-    }
-    if (lower.contains('500') || lower.contains('502') ||
-        lower.contains('503') || lower.contains('504')) {
-      return (
-        title: 'Server hiccup',
-        body: 'Something on our end — it\'s usually temporary. '
-              'Try again in a moment.',
-      );
-    }
-    return (
-      title: 'Scan didn\'t complete',
-      body: 'Something interrupted the render. Try again.',
-    );
   }
 
   /// Potential delta — how many points a full maximisation could add.
@@ -677,23 +638,24 @@ class _ApplyAllFixesButton extends StatefulWidget {
 
 class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
   bool _applied = false;
-  String? _localUrl;   // populated by a successful retry
-  bool _retrying = false;
-  String? _retryError;
+  String? _localUrl;   // populated if we had to render on demand
+  bool _rendering = false;
 
   String get _effectiveUrl =>
       (_localUrl != null && _localUrl!.isNotEmpty)
           ? _localUrl!
           : widget.maximizedImageUrl;
 
-  /// Single tap handler for the APPLY ALL FIXES button. Handles both
-  /// cases transparently:
-  ///   · URL already present (normal scan) → reveal the hero image.
-  ///   · URL empty (Replicate was down during /scan) → fire /maximize
-  ///     right here, wait, then reveal. Same button, same interaction —
-  ///     the user never sees a separate "retry" card.
+  /// Single tap handler for APPLY ALL FIXES. Two transparent paths:
+  ///   · URL present (normal scan) → reveal the hero image immediately.
+  ///   · URL empty (cached older scan, or server hiccup that our
+  ///     upstream auto-backfill missed) → fire /maximize on demand,
+  ///     retry forever via MirrorApiService, reveal when the URL lands.
+  ///
+  /// The user never sees an error message here. The button either
+  /// resolves to the hero image or keeps spinning until it does.
   Future<void> _onApplyTap() async {
-    if (_retrying) return;
+    if (_rendering) return;
     HapticFeedback.heavyImpact();
 
     // Fast path — we already have a URL, just reveal it.
@@ -702,43 +664,19 @@ class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
       return;
     }
 
-    // Slow path — render on demand.
-    setState(() { _retrying = true; _retryError = null; });
-    try {
-      final url = await MirrorApiService.maximizeOnly(
-        imageBytes: widget.imageBytes,
-        improve:    widget.improveList,
-      );
-      if (!mounted) return;
-      setState(() {
-        _localUrl = url;
-        _retrying = false;
-        _applied  = true; // reveal immediately; the tap was the commit
-      });
-    } catch (err) {
-      if (!mounted) return;
-      setState(() {
-        _retryError = _friendlyRetryError(err);
-        _retrying = false;
-      });
-    }
-  }
-
-  String _friendlyRetryError(Object err) {
-    final s = err.toString().toLowerCase();
-    if (s.contains('timeout') || s.contains('timed out')) {
-      return 'Render is taking too long. Try once more.';
-    }
-    if (s.contains('429')) {
-      return 'We\'re rendering a lot of scans right now. Try again in a moment.';
-    }
-    if (RegExp(r'\b50\d\b').hasMatch(s)) {
-      return 'Image service had a hiccup. Try again.';
-    }
-    if (s.contains('socket') || s.contains('network')) {
-      return 'Connection dropped. Check your network and try again.';
-    }
-    return 'Couldn\'t render. Try again.';
+    // Slow path — render on demand. maximizeOnly retries forever until
+    // it has a URL, so we only return here on success.
+    setState(() => _rendering = true);
+    final url = await MirrorApiService.maximizeOnly(
+      imageBytes: widget.imageBytes,
+      improve:    widget.improveList,
+    );
+    if (!mounted) return;
+    setState(() {
+      _localUrl  = url;
+      _rendering = false;
+      _applied   = true;
+    });
   }
 
   @override
@@ -770,9 +708,7 @@ class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
                 child: GestureDetector(
                   onTap: () => FullscreenImage.open(context,
                     url: url, caption: 'MAXIMIZED · you, applied'),
-                  child: Image.network(url,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _errorBox()),
+                  child: _SelfHealingImage(url: url),
                 ),
               ),
             ),
@@ -795,70 +731,139 @@ class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
     // success. Same visual affordance either way; the only surface-level
     // difference is the spinner during the slow path. The old separate
     // "retry card" is gone — users get one button, one interaction.
-    return Column(
-      children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: _retrying ? null : _onApplyTap,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _rendering ? null : _onApplyTap,
+        borderRadius: BorderRadius.circular(Rd.lg),
+        child: Container(
+          width: double.infinity, height: 58,
+          decoration: BoxDecoration(
+            color: AppColors.red,
             borderRadius: BorderRadius.circular(Rd.lg),
-            child: Container(
-              width: double.infinity, height: 58,
-              decoration: BoxDecoration(
-                color: AppColors.red,
-                borderRadius: BorderRadius.circular(Rd.lg),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.red.withValues(alpha: 0.45),
-                    blurRadius: 22, offset: const Offset(0, 6)),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (_retrying) ...[
-                    const SizedBox(
-                      width: 18, height: 18,
-                      child: CircularProgressIndicator(
-                        color: AppColors.base, strokeWidth: 2.2)),
-                    const SizedBox(width: 12),
-                    Text('RENDERING…',
-                      style: AppTypography.label.copyWith(
-                        color: AppColors.base, letterSpacing: 3.0,
-                        fontSize: 13, fontWeight: FontWeight.w900)),
-                  ] else ...[
-                    const Icon(Icons.auto_awesome,
-                      size: 18, color: AppColors.base),
-                    const SizedBox(width: 10),
-                    Text('APPLY ALL FIXES',
-                      style: AppTypography.label.copyWith(
-                        color: AppColors.base, letterSpacing: 3.0,
-                        fontSize: 13, fontWeight: FontWeight.w900)),
-                  ],
-                ],
-              ),
-            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.red.withValues(alpha: 0.45),
+                blurRadius: 22, offset: const Offset(0, 6)),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (_rendering) ...[
+                const SizedBox(
+                  width: 18, height: 18,
+                  child: CircularProgressIndicator(
+                    color: AppColors.base, strokeWidth: 2.2)),
+                const SizedBox(width: 12),
+                Text('RENDERING…',
+                  style: AppTypography.label.copyWith(
+                    color: AppColors.base, letterSpacing: 3.0,
+                    fontSize: 13, fontWeight: FontWeight.w900)),
+              ] else ...[
+                const Icon(Icons.auto_awesome,
+                  size: 18, color: AppColors.base),
+                const SizedBox(width: 10),
+                Text('APPLY ALL FIXES',
+                  style: AppTypography.label.copyWith(
+                    color: AppColors.base, letterSpacing: 3.0,
+                    fontSize: 13, fontWeight: FontWeight.w900)),
+              ],
+            ],
           ),
         ),
-        // Retry error surfaces just below the button — stays visible on
-        // the same screen as the CTA so the user can tap again without
-        // scrolling or navigating.
-        if (_retryError != null) ...[
-          const SizedBox(height: 8),
-          Text(_retryError!,
-            style: AppTypography.bodySmall.copyWith(
-              color: AppColors.signalAmber, fontSize: 11.5)),
-        ],
-      ],
+      ),
     );
   }
 
-  Widget _errorBox() => Container(
-    color: AppColors.surface1,
-    alignment: Alignment.center,
-    child: Text('Maximized render unavailable',
-      style: AppTypography.bodySmall.copyWith(color: AppColors.textMuted)),
-  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SELF-HEALING IMAGE — hero render never shows a broken state.
+//
+//  Image.network's default errorBuilder fires once and gives up forever.
+//  If the CDN hiccups (Replicate's r8.im has brief 502s), or the URL is
+//  momentarily unreachable, the old code painted "Maximized render
+//  unavailable" and sat there until the user re-navigated. User's ask:
+//  never fail. So we retry on error — quietly, automatically, with a
+//  cache-busting key so the HTTP client actually re-fetches instead of
+//  returning the same cached failure.
+//
+//  Under a real outage this spins a "rendering" shimmer indefinitely.
+//  That's the intentional trade-off: user sees a promise, not a failure.
+// ═══════════════════════════════════════════════════════════════════════════
+class _SelfHealingImage extends StatefulWidget {
+  final String url;
+  const _SelfHealingImage({required this.url});
+
+  @override
+  State<_SelfHealingImage> createState() => _SelfHealingImageState();
+}
+
+class _SelfHealingImageState extends State<_SelfHealingImage> {
+  int _attempt = 0;
+  Timer? _retryTimer;
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    // Exponential backoff capped at 10s so quick hiccups recover
+    // instantly, sustained outages don't hammer the CDN.
+    final seconds = _attempt < 3 ? 2 : (_attempt < 6 ? 5 : 10);
+    _retryTimer = Timer(Duration(seconds: seconds), () {
+      if (!mounted) return;
+      setState(() => _attempt++);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Cache-busting — appending ?v=N forces Flutter's ImageCache to treat
+    // this as a new URL on retry, so a cached 404 doesn't keep winning.
+    final bustedUrl = _attempt == 0
+        ? widget.url
+        : '${widget.url}${widget.url.contains('?') ? '&' : '?'}v=$_attempt';
+
+    return Image.network(
+      bustedUrl,
+      key: ValueKey('heal-$_attempt-${widget.url}'),
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      loadingBuilder: (_, child, progress) {
+        if (progress == null) return child;
+        return _ShimmerBox();
+      },
+      errorBuilder: (_, __, ___) {
+        // Schedule a silent retry; paint the shimmer meanwhile so the
+        // user sees "working on it" rather than "broken."
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scheduleRetry();
+        });
+        return _ShimmerBox();
+      },
+    );
+  }
+}
+
+/// Dark shimmer placeholder while the hero loads / retries.
+class _ShimmerBox extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.surface1,
+      alignment: Alignment.center,
+      child: const SizedBox(
+        width: 28, height: 28,
+        child: CircularProgressIndicator(
+          strokeWidth: 2, color: AppColors.accent),
+      ),
+    );
+  }
 }
 
 class _ConsultCard extends StatelessWidget {
