@@ -46,19 +46,21 @@ enum _Tier { monthly, annual, credits }
 class _PaywallScreenState extends State<PaywallScreen> {
   _Tier _selected = _Tier.annual;
   PurchaseOfferings _offerings = PurchaseOfferings.empty();
-  bool _loading = true;
   bool _purchasing = false;
 
   @override
   void initState() {
     super.initState();
-    // Dev-flag bypass: if somehow we landed on the paywall (deep link,
-    // stale route), bounce back to the destination the flow was heading
-    // to. Post-scan → /report with the stashed payload. Otherwise /home.
-    if (kBypassPaywall) {
+    // Dev-flag bypass: auto-redirect back UNLESS the caller passed
+    // `force: true` in the extras. That flag is how the home-header
+    // upgrade chip opens the paywall for manual preview/testing — every
+    // OTHER path (post-scan gate, onboarding end, stale deep link)
+    // bounces straight back so the user stays in-flow.
+    final ctx   = widget.context ?? const <String, dynamic>{};
+    final force = ctx['force'] == true;
+    if (kBypassPaywall && !force) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        final ctx = widget.context ?? const <String, dynamic>{};
         final after = ctx['afterPurchase'] as String?;
         if (after != null && ctx.isNotEmpty) {
           context.go(after, extra: ctx);
@@ -74,21 +76,38 @@ class _PaywallScreenState extends State<PaywallScreen> {
   Future<void> _loadOfferings() async {
     final off = await PurchaseService.loadOfferings();
     if (!mounted) return;
-    setState(() {
-      _offerings = off;
-      _loading = false;
-    });
+    setState(() => _offerings = off);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   //  PRICE HELPERS — everything the user sees as currency comes from
   //  the StoreKit / Play Billing SDK via RevenueCat. Never hardcoded.
+  //
+  //  Exception: under kBypassPaywall we fall back to visual-only
+  //  placeholder numbers so the paywall can be previewed before
+  //  RevenueCat keys are pasted. The moment the SDK returns a real
+  //  package these placeholders are ignored and the store price wins —
+  //  so a release build (kBypassPaywall = false) can NEVER ship
+  //  hardcoded prices, even if the offering is misconfigured.
   // ─────────────────────────────────────────────────────────────────────────
+
+  /// Visual-only placeholder prices used under kBypassPaywall while
+  /// RevenueCat isn't configured. Flipped off for release.
+  static const _placeholderMonthly = r'$9.99';
+  static const _placeholderAnnual  = r'$49.99';
+  static const _placeholderCredits = r'$14.99';
 
   String _priceFor(_Tier t) {
     final pkg = _packageFor(t);
-    if (pkg == null) return _loading ? '—' : '—';
-    return pkg.storeProduct.priceString;
+    if (pkg != null) return pkg.storeProduct.priceString;
+    if (kBypassPaywall) {
+      switch (t) {
+        case _Tier.monthly: return _placeholderMonthly;
+        case _Tier.annual:  return _placeholderAnnual;
+        case _Tier.credits: return _placeholderCredits;
+      }
+    }
+    return '—';
   }
 
   /// Monthly equivalent for the annual plan — computed from the real
@@ -96,12 +115,14 @@ class _PaywallScreenState extends State<PaywallScreen> {
   /// If store returned £89.99, this is £7.50 etc.
   String _perMonthForAnnual() {
     final annual = _offerings.annual;
-    if (annual == null) return '—';
-    final p = annual.storeProduct;
-    final perMonth = p.price / 12.0;
-    // Use the currency code RevenueCat gave us and a simple formatter
-    // that matches typical App Store display (symbol + 2dp).
-    return _formatPrice(perMonth, p.currencyCode, p.priceString);
+    if (annual != null) {
+      final p = annual.storeProduct;
+      final perMonth = p.price / 12.0;
+      return _formatPrice(perMonth, p.currencyCode, p.priceString);
+    }
+    // Placeholder: $49.99 / 12 ≈ $4.17
+    if (kBypassPaywall) return r'$4.17';
+    return '—';
   }
 
   /// Format with the same currency symbol the store used — we steal

@@ -52,26 +52,43 @@ app.post('/maximize', async (req, res) => {
   }
 });
 
-// ── Full pipeline: analyse → maximize (3-pass chain) in one call.
-// The hero is a 3-pass Flux chain — one pass per fix — and the 3
-// intermediate outputs double as the fix-card preview images so the
-// Flutter side doesn't need a second Flux call when the user taps a
-// fix to see it. 3 Flux calls for the entire report (hero + 3 fix
-// previews), not 6.
+// ── Full pipeline: analyse + maximize in one call.
+//
+// Resilience policy: analyse failure = 500 (nothing to show), but maximize
+// failure after retries = 200 with an empty hero URL. The client renders
+// the report and surfaces a "Generate hero image" retry button that hits
+// /maximize directly. The user sees their analysis even when Replicate is
+// having a bad day — which was the #1 cause of "Server hiccup" reports.
+//
+// Every stage is timed and logged so failures are diagnosable from server
+// logs alone — no guessing at which of the three API calls died.
 app.post('/scan', async (req, res) => {
+  const t0 = Date.now();
   try {
     const { imageBase64, extraImagesBase64, geometry } = req.body;
     if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });
 
-    const report = await analyse({
-      imageBase64,
-      extraImages: Array.isArray(extraImagesBase64) ? extraImagesBase64 : [],
-      geometry,
-    });
+    const extras = Array.isArray(extraImagesBase64) ? extraImagesBase64 : [];
+    console.log(`[/scan] start — imageBytes=${Math.round(imageBase64.length * 0.75)} extras=${extras.length}`);
 
-    // Pull the 3 visualRequest strings straight off the fixes so the chain
-    // is 1:1 with the cards. Fallback to brief.improve if any visualRequest
-    // is missing (older analyse response, cache, etc).
+    // ── Stage 1: analyse (GPT-4o Vision) — REQUIRED ────────────────────────
+    const tAnalyse = Date.now();
+    let report;
+    try {
+      report = await analyse({ imageBase64, extraImages: extras, geometry });
+    } catch (err) {
+      console.error(`[/scan] analyse FAILED after ${Date.now() - tAnalyse}ms:`, err);
+      return res.status(500).json({
+        error: err.message,
+        stage: 'analyse',
+      });
+    }
+    console.log(`[/scan] analyse ok: ${Date.now() - tAnalyse}ms fixes=${report?.fixes?.length ?? 0}`);
+
+    // ── Stage 2: maximize (Nano Banana + face-swap) — OPTIONAL ──────────────
+    // If this whole stage fails we still return the report with an empty
+    // hero url and a structured error the client can surface as "Tap to
+    // generate". No more "Server hiccup" on an otherwise-valid scan.
     const chainBrief = {
       improve: (report.fixes ?? [])
         .map((f, i) => (f?.visualRequest || report?.brief?.improve?.[i] || ''))
@@ -79,15 +96,32 @@ app.post('/scan', async (req, res) => {
         .filter(Boolean),
     };
 
-    const maxed = await maximize({
-      imageBase64,
-      brief: chainBrief,
-    });
+    const tMax = Date.now();
+    let maxed;
+    try {
+      maxed = await maximize({ imageBase64, brief: chainBrief });
+      console.log(`[/scan] maximize ok: ${Date.now() - tMax}ms url=${(maxed?.url || '').slice(0, 80)}`);
+    } catch (err) {
+      const elapsed = Date.now() - tMax;
+      const msg = String(err?.message ?? err);
+      console.error(`[/scan] maximize FAILED after ${elapsed}ms — returning report-only: ${msg}`);
+      maxed = {
+        url:              '',
+        editUrl:          '',
+        prompt:           '',
+        seed:             0,
+        heroChange:       '',
+        model:            '',
+        intermediateUrls: [],
+        error:            msg,
+      };
+    }
 
+    console.log(`[/scan] DONE ${Date.now() - t0}ms`);
     res.json({ report, maximized: maxed });
   } catch (err) {
-    console.error('[/scan] error:', err);
-    res.status(500).json({ error: err.message });
+    console.error(`[/scan] unexpected error after ${Date.now() - t0}ms:`, err);
+    res.status(500).json({ error: err.message, stage: 'unexpected' });
   }
 });
 

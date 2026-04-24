@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../config/dev_flags.dart';
 import '../../models/protocol.dart';
 import '../../models/scan_record.dart';
 import '../../services/local_store_service.dart';
@@ -110,19 +109,18 @@ class _ScanHubTab extends StatelessWidget {
                     color: AppColors.red, shape: BoxShape.circle),
                 ),
                 const Spacer(),
-                // Paywall / upgrade chip — the only red glyph in the header,
-                // so the user sees it immediately. Taps through to the
-                // subscription screen where they can manage plan + buy
-                // credits. Hidden in dev-bypass mode so testing reflects
-                // the real post-purchase experience (no upgrade prompts).
-                if (!kBypassPaywall) ...[
-                  _IconBtn(
-                    icon: Icons.workspace_premium_rounded,
-                    tint: AppColors.red,
-                    onTap: () => context.push('/paywall'),
-                  ),
-                  const SizedBox(width: 8),
-                ],
+                // Paywall / upgrade chip — always visible so the user can
+                // preview the paywall screen during testing. The `force`
+                // flag in extras tells PaywallScreen to ignore the
+                // kBypassPaywall auto-redirect, otherwise the user would
+                // land right back on /home.
+                _IconBtn(
+                  icon: Icons.workspace_premium_rounded,
+                  tint: AppColors.red,
+                  onTap: () => context.push(
+                    '/paywall', extra: const {'force': true}),
+                ),
+                const SizedBox(width: 8),
                 _IconBtn(
                   icon: Icons.tune,
                   onTap: () => context.push('/settings'),

@@ -61,4 +61,32 @@ class MirrorApiService {
     final decoded = jsonDecode(response.body) as Map<String, dynamic>;
     return MirrorAnalysis.fromJson(decoded);
   }
+
+  /// Re-run ONLY the hero render (Nano Banana edit + face-swap), without
+  /// re-doing GPT analysis. Used by the "Generate hero image" retry button
+  /// on the report when the original /scan came back with an empty
+  /// maximizedImageUrl — i.e. Replicate was down during the first call.
+  /// Returns the new hero URL. Throws on failure.
+  static Future<String> maximizeOnly({
+    required Uint8List imageBytes,
+    required List<String> improve,
+  }) async {
+    final payload = <String, dynamic>{
+      'imageBase64': base64Encode(imageBytes),
+      'brief':       {'improve': improve},
+    };
+    final response = await http.post(
+      Uri.parse('${ApiConfig.backendBaseUrl}/maximize'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    ).timeout(const Duration(seconds: 120));
+
+    if (response.statusCode != 200) {
+      throw Exception('Backend ${response.statusCode}: ${response.body}');
+    }
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    final url = (decoded['url'] as String? ?? '').trim();
+    if (url.isEmpty) throw Exception('Render returned empty URL');
+    return url;
+  }
 }

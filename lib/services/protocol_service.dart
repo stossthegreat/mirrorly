@@ -231,9 +231,10 @@ const _jaw = _Template(
       duration: '8 min', category: TaskCategory.exercise,
       timeBand: TimeBand.pm),
     DailyTask(
-      title: 'Mouth tape — nasal breath lock',
-      detail: '3M micropore across the lips. Keeps tongue on palate + nasal '
-              'breath through sleep. Skip if sleep apnea.',
+      title: 'Back-sleep, head neutral',
+      detail: 'On the back, pillow supporting the neck — jaw stays forward '
+              'overnight instead of collapsing sideways. Side-sleep '
+              'compresses the masseter asymmetrically.',
       duration: 'all night', category: TaskCategory.habit,
       timeBand: TimeBand.night),
     DailyTask(
@@ -380,9 +381,10 @@ const _chin = _Template(
       duration: '8 min', category: TaskCategory.exercise,
       timeBand: TimeBand.pm),
     DailyTask(
-      title: 'Mouth tape + back sleep',
-      detail: 'Locks tongue posture and prevents the jaw collapsing backward '
-              'at night. Wake with the jaw forward, not tucked.',
+      title: 'Back-sleep, chin forward',
+      detail: 'On your back with a small pillow. Wake with the jaw '
+              'forward instead of tucked. Side-sleep compresses the '
+              'platysma and pulls the chin back.',
       duration: 'all night', category: TaskCategory.habit,
       timeBand: TimeBand.night),
   ],
@@ -628,11 +630,12 @@ const _foundations = _Template(
       duration: '8 h', category: TaskCategory.habit,
       timeBand: TimeBand.night),
     DailyTask(
-      title: 'Mouth tape — nasal breath lock',
-      detail: '3M micropore across the lips. Forces nasal breath + tongue '
-              'on palate all night. Skip if sleep apnea.',
-      duration: 'all night', category: TaskCategory.habit,
-      timeBand: TimeBand.night),
+      title: 'Nasal breathing — daytime practice',
+      detail: 'Catch yourself mouth-breathing and close your lips. Nose '
+              'only through sedentary hours and walks. Supports tongue '
+              'posture and slows jaw-back drift over weeks.',
+      duration: 'ongoing', category: TaskCategory.habit,
+      timeBand: TimeBand.ongoing),
   ],
 );
 

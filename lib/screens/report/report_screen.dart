@@ -20,10 +20,8 @@ import '../../services/scoring_service.dart';
 import '../../services/trait_builder_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
-import '../../services/chat_service.dart';
 import '../../services/share_service.dart';
 import '../../widgets/common/fullscreen_image.dart';
-import '../../widgets/common/quick_tryon_chips.dart';
 import '../../widgets/report/archetype_card.dart';
 import '../../widgets/report/feature_grid.dart';
 import '../../widgets/report/hero_card.dart';
@@ -279,32 +277,25 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   /// Build the 3 micro-proof one-liners shown under the hero + on the share
-  /// card. Pulls the top-3 STRENGTH traits and renders them as
-  /// "TOP X% NAME" so each line reads as a verifiable spec, not marketing.
-  /// Falls back to neutral but punchy lines when the user has fewer than 3
-  /// strengths surfaced (rare on a clean scan).
+  /// card. Pulls the top-3 STRENGTH traits and renders their pre-composed
+  /// emotional heroLine strings — "Your hunter eyes beat 88% of men" reads
+  /// and shares harder than "TOP 12% HUNTER EYES". Falls back to neutral
+  /// but punchy lines when fewer than 3 strengths surfaced.
   List<String> _buildMicroProofs(List<Trait> traits) {
     final strengths = traits
         .where((t) => t.kind == TraitKind.strength)
         .take(3)
         .toList();
-    final lines = <String>[];
-    for (final t in strengths) {
-      final pct = t.pct.trim();
-      // Some pct strings ("BALANCED FULLNESS") aren't percentile-shaped —
-      // surface them verbatim. The percentile-shaped ones lead with the
-      // number ("TOP 5% SYMMETRY") for the harder flex.
-      if (pct.toUpperCase().startsWith('TOP ')) {
-        lines.add('$pct ${t.name}');
-      } else if (pct.isNotEmpty && !pct.contains(RegExp(r'[A-Z]{2,} [A-Z]{2,}'))) {
-        lines.add('${t.name} · $pct');
-      } else {
-        lines.add(t.name);
-      }
-    }
+    final lines = [
+      for (final t in strengths)
+        t.heroLine.trim().isNotEmpty ? t.heroLine : t.name,
+    ];
     while (lines.length < 3) {
-      lines.add(const ['MEASURED PROFILE', 'BALANCED FRAME',
-                        'STRUCTURED ARCHETYPE'][lines.length]);
+      lines.add(const [
+        'Measured profile — 16 geometry points',
+        'Balanced frame — proportions check',
+        'Structured archetype — bones on spec',
+      ][lines.length]);
     }
     return lines;
   }
@@ -452,70 +443,60 @@ class _ReportScreenState extends State<ReportScreen> {
           // ── 4 · APPLY ALL FIXES ────────────────────────────────────────
           // BeforeAfterCard removed — the hero card now carries the B/A
           // moment, and showing it twice diluted the impact.
+          //
+          // When the hero URL is empty (Replicate was down during /scan and
+          // we returned report-only), the button's state morphs to a
+          // "Generate hero image" retry that hits /maximize directly. No
+          // re-scan required.
           _ApplyAllFixesButton(
             maximizedImageUrl: a.maximizedImageUrl,
+            imageBytes:        widget.imageBytes,
+            improveList:       a.report.fixes
+                .map((f) => f.visualRequest.trim())
+                .where((s) => s.isNotEmpty)
+                .toList(),
           ).animate().fadeIn(delay: 2400.ms, duration: 400.ms),
 
           const SizedBox(height: Sp.xl),
 
-          // ── 5 · THREE FIX CARDS (GPT-sourced, with inline Flux) ────────
+          // ── 5 · FIX HEADLINES (text only — no per-fix Flux render) ─────
+          // We deliberately don't render per-fix inline try-ons any more
+          // (each tap on "See it" fired a fresh /tryon → 3 extra Nano
+          // Banana calls per scan). The hero "Final form" already shows
+          // the combined maximized twin, and the Mirror chat can render
+          // one-at-a-time if the user wants to drill in. This is a pure
+          // cost reduction — text advice stays, generation is centralised.
           Text('THE FIXES',
             style: AppTypography.label.copyWith(
               color: AppColors.textTertiary, letterSpacing: 3.0, fontSize: 10)),
           const SizedBox(height: Sp.sm),
-          ...a.report.fixes.asMap().entries.map((e) {
-            // Each fix card displays the cumulative chain output for its
-            // index — instantly, without a second Flux call. intermediateUrls
-            // comes from the hero's 3-pass chain. If missing (older scan
-            // or chain failure), the card falls back to firing /tryon.
-            final pre = e.key < a.intermediateUrls.length
-                ? a.intermediateUrls[e.key]
-                : null;
-            return _FixCard(
-              index: e.key + 1, fix: e.value,
-              capturedBytes:  widget.imageBytes,
-              geometry:       widget.geometry,
-              precomputedUrl: pre,
-            ).animate().fadeIn(delay: Duration(milliseconds: 2600 + e.key * 120));
-          }),
+          ...a.report.fixes.asMap().entries.map((e) =>
+            _FixTextCard(index: e.key + 1, fix: e.value)
+              .animate().fadeIn(delay: Duration(milliseconds: 2600 + e.key * 120))),
 
           const SizedBox(height: Sp.xl),
 
-          // ── 6 · PROTOCOL CTA ──────────────────────────────────────────
-          // Auto-prescribed 60-day routine keyed to the scan's pulldown
-          // axis. Placed between the Fixes (the diagnosis) and the Consult
-          // card (the conversation) — the natural commit moment. If the
-          // user already has an active protocol, the card morphs to
-          // "Continue day X" rather than overwriting it.
-          //
-          // Pulldown is backend prose ("midface softness that body-fat
-          // below 14% solves"), so we pass geometry too — the service
-          // keyword-matches the prose and falls back to geometry if no
-          // match, producing a clean canonical axis label.
-          _ProtocolCtaCard(
-            pulldown: a.report.pulldown,
-            geometry: widget.geometry,
-          ).animate().fadeIn(delay: 2900.ms, duration: 400.ms),
-
-          const SizedBox(height: Sp.xl),
-
-          // ── 7 · CONSULT CTA ────────────────────────────────────────────
+          // ── 6 · CONSULT CTA ────────────────────────────────────────────
           _ConsultCard(
             onTap: () => context.push(
               '/chat',
               extra: {'geometry': widget.geometry, 'imagePath': _savedImagePath},
             ),
-          ).animate().fadeIn(delay: 3000.ms, duration: 400.ms),
+          ).animate().fadeIn(delay: 2900.ms, duration: 400.ms),
 
           const SizedBox(height: Sp.xl),
 
-          // ── 8 · DEEPER ANALYSIS ─ collapsed; the full detail dump ──────
+          // ── 7 · DEEPER ANALYSIS ─ always-open full breakdown ───────────
+          // Previously the two nested dropdowns (this panel + the inner
+          // HiddenDepthPanel) gated content behind two taps. That's our
+          // moat — 16 measurements, archetype match, feature-by-feature
+          // read, GPT prose — no other app surfaces it. Release it all.
           _DeeperAnalysisPanel(
             analysis:   a,
             geometry:   widget.geometry,
             match:      match,
             savedImagePath: _savedImagePath,
-          ).animate().fadeIn(delay: 3200.ms, duration: 400.ms),
+          ).animate().fadeIn(delay: 3000.ms, duration: 400.ms),
 
           const SizedBox(height: Sp.xl),
 
@@ -524,6 +505,19 @@ class _ReportScreenState extends State<ReportScreen> {
             .animate().fadeIn(delay: 1500.ms, duration: 500.ms)
             .slideY(begin: 0.05, end: 0,
                 delay: 1500.ms, duration: 500.ms, curve: Curves.easeOut),
+
+          const SizedBox(height: Sp.xl),
+
+          // ── 8 · PROTOCOL CTA ─ the final commit moment ─────────────────
+          // Moved to sit just above the Done/Consult row so it's the last
+          // thing the user sees as they finish reading. Auto-prescribed
+          // 60-day routine keyed to the scan's pulldown axis. If a
+          // protocol is already active the card morphs to "Continue day
+          // X" rather than overwriting it.
+          _ProtocolCtaCard(
+            pulldown: a.report.pulldown,
+            geometry: widget.geometry,
+          ).animate().fadeIn(delay: 3200.ms, duration: 400.ms),
 
           const SizedBox(height: Sp.xl),
 
@@ -576,9 +570,15 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 }
 
-// ── Consultation CTA card ────────────────────────────────────────────────────
-// ── DEEPER ANALYSIS · collapsed disclosure housing all old widgets ──────────
-class _DeeperAnalysisPanel extends StatefulWidget {
+// ── Full breakdown — always open, always rendered ───────────────────────────
+//
+// Was a tap-to-expand disclosure. User's call: "instead of drop down, open
+// them so it's one big page. That's our thing — we can give all those
+// details no one else can. So release it all." Header + animation removed;
+// content rendered directly. Try-on chips removed too (per the same note:
+// the presets were feeling like a gimmick on the results card, and the
+// Mirror chat is where on-demand renders live now).
+class _DeeperAnalysisPanel extends StatelessWidget {
   final MirrorAnalysis analysis;
   final FaceGeometry geometry;
   final ArchetypeMatch match;
@@ -587,155 +587,70 @@ class _DeeperAnalysisPanel extends StatefulWidget {
     required this.analysis, required this.geometry, required this.match,
     this.savedImagePath,
   });
-  @override
-  State<_DeeperAnalysisPanel> createState() => _DeeperAnalysisPanelState();
-}
-
-class _DeeperAnalysisPanelState extends State<_DeeperAnalysisPanel> {
-  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
+    final a = analysis;
+    final scoreComputed = ScoringService.compute(geometry);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => setState(() => _open = !_open),
-            borderRadius: BorderRadius.circular(Rd.lg),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: Sp.md, vertical: 16),
-              decoration: BoxDecoration(
-                color: AppColors.surface1,
-                borderRadius: BorderRadius.circular(Rd.lg),
-                border: Border.all(
-                  color: AppColors.measure.withValues(alpha: 0.38), width: 0.9),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 38, height: 38,
-                    decoration: BoxDecoration(
-                      color: AppColors.measure.withValues(alpha: 0.14),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.measure.withValues(alpha: 0.6), width: 0.8),
-                    ),
-                    child: const Icon(Icons.all_inclusive,
-                      size: 17, color: AppColors.measure),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('READ THE FULL BREAKDOWN',
-                          style: AppTypography.label.copyWith(
-                            color: AppColors.measure,
-                            letterSpacing: 2.6, fontSize: 10.5,
-                            fontWeight: FontWeight.w900)),
-                        const SizedBox(height: 3),
-                        Text('All 16 measurements · GPT read · fixes timeline',
-                          style: AppTypography.bodySmall.copyWith(
-                            color: AppColors.textTertiary, fontSize: 11.5)),
-                      ],
-                    ),
-                  ),
-                  AnimatedRotation(
-                    turns: _open ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 240),
-                    child: const Icon(Icons.expand_more_rounded,
-                      color: AppColors.measure, size: 22),
-                  ),
-                ],
-              ),
-            ),
+        // Small section masthead so the breakdown reads as its own block,
+        // not a random pile of cards.
+        Text('FULL BREAKDOWN',
+          style: AppTypography.label.copyWith(
+            color: AppColors.measure,
+            letterSpacing: 2.8, fontSize: 10.5,
+            fontWeight: FontWeight.w900)),
+        const SizedBox(height: 3),
+        Text('All 16 measurements · archetype · feature-by-feature read',
+          style: AppTypography.bodySmall.copyWith(
+            color: AppColors.textTertiary, fontSize: 11.5, height: 1.4)),
+        const SizedBox(height: Sp.md),
+
+        // Archetype details
+        ArchetypeCard(match: match),
+        const SizedBox(height: Sp.md),
+
+        // Feature-by-feature deep read
+        FeatureGrid(
+          reads: FeatureAnalysisService.analyse(geometry),
+          onSeeIt: (read) => context.push(
+            '/chat',
+            extra: {
+              'geometry':  geometry,
+              'imagePath': savedImagePath,
+              'autoSend':  read.tryonPrompt,
+            },
           ),
         ),
+        const SizedBox(height: Sp.md),
 
-        ClipRect(
-          child: AnimatedSize(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-            alignment: Alignment.topCenter,
-            child: _open ? _fullDetail(context) : const SizedBox.shrink(),
-          ),
-        ),
-      ],
-    );
-  }
+        // 16-metric grid — previously behind a second tap, now inline
+        HiddenDepthPanel(geometry: geometry),
+        const SizedBox(height: Sp.md),
 
-  Widget _fullDetail(BuildContext context) {
-    final a = widget.analysis;
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Archetype details
-          ArchetypeCard(match: widget.match),
+        // GPT prose blocks
+        if (a.report.oneLineVerdict.isNotEmpty) ...[
+          VerdictCard(
+            verdict:   a.report.oneLineVerdict,
+            score:     scoreComputed.value,
+            tier:      scoreComputed.tierLabel,
+            archetype: match.archetype.name),
           const SizedBox(height: Sp.md),
-
-          // Feature-by-feature deep read
-          FeatureGrid(
-            reads: FeatureAnalysisService.analyse(widget.geometry),
-            onSeeIt: (read) => context.push(
-              '/chat',
-              extra: {
-                'geometry':  widget.geometry,
-                'imagePath': widget.savedImagePath,
-                'autoSend':  read.tryonPrompt,
-              },
-            ),
-          ),
-          const SizedBox(height: Sp.md),
-
-          // 16-metric grid behind one more tap
-          HiddenDepthPanel(geometry: widget.geometry),
-          const SizedBox(height: Sp.md),
-
-          // GPT prose blocks
-          if (a.report.oneLineVerdict.isNotEmpty) ...[
-            VerdictCard(
-              verdict:   a.report.oneLineVerdict,
-              score:     ScoringService.compute(widget.geometry).value,
-              tier:      ScoringService.compute(widget.geometry).tierLabel,
-              archetype: widget.match.archetype.name),
-            const SizedBox(height: Sp.md),
-          ],
-
-          if (a.report.boneReading.isNotEmpty) ...[
-            _Block(label: 'THE READ', color: AppColors.measure,
-              body: a.report.boneReading),
-            const SizedBox(height: Sp.md),
-          ],
-          _Block(label: 'WHAT\'S ALREADY WORKING', color: AppColors.signalGreen,
-            body: a.report.strongest),
-          const SizedBox(height: Sp.md),
-          _Block(label: 'WHAT\'S HOLDING IT BACK', color: AppColors.signalAmber,
-            body: a.report.pulldown),
-
-          const SizedBox(height: Sp.md),
-
-          // Quick-action chips — kept here for depth users who want more renders
-          Text('TRY MORE LOOKS',
-            style: AppTypography.label.copyWith(
-              color: AppColors.textTertiary, letterSpacing: 2.5, fontSize: 9)),
-          const SizedBox(height: Sp.sm),
-          QuickTryonChips(
-            geometry: widget.geometry,
-            onTap: (style, cat) => context.push(
-              '/chat',
-              extra: {
-                'geometry':  widget.geometry,
-                'imagePath': widget.savedImagePath,
-                'autoSend':  style,
-              },
-            ),
-          ),
         ],
-      ),
+
+        if (a.report.boneReading.isNotEmpty) ...[
+          _Block(label: 'THE READ', color: AppColors.measure,
+            body: a.report.boneReading),
+          const SizedBox(height: Sp.md),
+        ],
+        _Block(label: 'WHAT\'S ALREADY WORKING', color: AppColors.signalGreen,
+          body: a.report.strongest),
+        const SizedBox(height: Sp.md),
+        _Block(label: 'WHAT\'S HOLDING IT BACK', color: AppColors.signalAmber,
+          body: a.report.pulldown),
+      ],
     );
   }
 }
@@ -743,7 +658,18 @@ class _DeeperAnalysisPanelState extends State<_DeeperAnalysisPanel> {
 // ── APPLY ALL FIXES — the primary transformation moment ─────────────────────
 class _ApplyAllFixesButton extends StatefulWidget {
   final String maximizedImageUrl;
-  const _ApplyAllFixesButton({required this.maximizedImageUrl});
+  /// Captured selfie bytes — needed to call /maximize for the retry path
+  /// if the original /scan returned an empty hero url.
+  final Uint8List imageBytes;
+  /// The three visualRequest strings from the fix cards (same thing /scan
+  /// normally feeds to maximize as the "improve" list).
+  final List<String> improveList;
+
+  const _ApplyAllFixesButton({
+    required this.maximizedImageUrl,
+    required this.imageBytes,
+    required this.improveList,
+  });
 
   @override
   State<_ApplyAllFixesButton> createState() => _ApplyAllFixesButtonState();
@@ -751,11 +677,76 @@ class _ApplyAllFixesButton extends StatefulWidget {
 
 class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
   bool _applied = false;
+  String? _localUrl;   // populated by a successful retry
+  bool _retrying = false;
+  String? _retryError;
+
+  String get _effectiveUrl =>
+      (_localUrl != null && _localUrl!.isNotEmpty)
+          ? _localUrl!
+          : widget.maximizedImageUrl;
+
+  /// Single tap handler for the APPLY ALL FIXES button. Handles both
+  /// cases transparently:
+  ///   · URL already present (normal scan) → reveal the hero image.
+  ///   · URL empty (Replicate was down during /scan) → fire /maximize
+  ///     right here, wait, then reveal. Same button, same interaction —
+  ///     the user never sees a separate "retry" card.
+  Future<void> _onApplyTap() async {
+    if (_retrying) return;
+    HapticFeedback.heavyImpact();
+
+    // Fast path — we already have a URL, just reveal it.
+    if (_effectiveUrl.isNotEmpty) {
+      setState(() => _applied = true);
+      return;
+    }
+
+    // Slow path — render on demand.
+    setState(() { _retrying = true; _retryError = null; });
+    try {
+      final url = await MirrorApiService.maximizeOnly(
+        imageBytes: widget.imageBytes,
+        improve:    widget.improveList,
+      );
+      if (!mounted) return;
+      setState(() {
+        _localUrl = url;
+        _retrying = false;
+        _applied  = true; // reveal immediately; the tap was the commit
+      });
+    } catch (err) {
+      if (!mounted) return;
+      setState(() {
+        _retryError = _friendlyRetryError(err);
+        _retrying = false;
+      });
+    }
+  }
+
+  String _friendlyRetryError(Object err) {
+    final s = err.toString().toLowerCase();
+    if (s.contains('timeout') || s.contains('timed out')) {
+      return 'Render is taking too long. Try once more.';
+    }
+    if (s.contains('429')) {
+      return 'We\'re rendering a lot of scans right now. Try again in a moment.';
+    }
+    if (RegExp(r'\b50\d\b').hasMatch(s)) {
+      return 'Image service had a hiccup. Try again.';
+    }
+    if (s.contains('socket') || s.contains('network')) {
+      return 'Connection dropped. Check your network and try again.';
+    }
+    return 'Couldn\'t render. Try again.';
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (_applied) {
-      // Final form unlocked — the maximized twin blown up, with glow
+    final url = _effectiveUrl;
+
+    // ─── Hero revealed — final form ─────────────────────────────────────
+    if (_applied && url.isNotEmpty) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(Sp.md),
@@ -778,12 +769,10 @@ class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
                 aspectRatio: 3 / 4,
                 child: GestureDetector(
                   onTap: () => FullscreenImage.open(context,
-                    url: widget.maximizedImageUrl, caption: 'MAXIMIZED · you, applied'),
-                  child: widget.maximizedImageUrl.isNotEmpty
-                      ? Image.network(widget.maximizedImageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _errorBox())
-                      : _errorBox(),
+                    url: url, caption: 'MAXIMIZED · you, applied'),
+                  child: Image.network(url,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _errorBox()),
                 ),
               ),
             ),
@@ -800,39 +789,67 @@ class _ApplyAllFixesButtonState extends State<_ApplyAllFixesButton> {
             duration: 450.ms, curve: Curves.easeOutBack);
     }
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.heavyImpact();
-          setState(() => _applied = true);
-        },
-        borderRadius: BorderRadius.circular(Rd.lg),
-        child: Container(
-          width: double.infinity, height: 58,
-          decoration: BoxDecoration(
-            color: AppColors.red,
+    // ─── CTA — Apply all fixes (same button, both paths) ────────────────
+    // When url is present, tap → instant reveal.
+    // When url is empty,  tap → fire /maximize in-place → reveal on
+    // success. Same visual affordance either way; the only surface-level
+    // difference is the spinner during the slow path. The old separate
+    // "retry card" is gone — users get one button, one interaction.
+    return Column(
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _retrying ? null : _onApplyTap,
             borderRadius: BorderRadius.circular(Rd.lg),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.red.withValues(alpha: 0.45),
-                blurRadius: 22, offset: const Offset(0, 6)),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.auto_awesome,
-                size: 18, color: AppColors.base),
-              const SizedBox(width: 10),
-              Text('APPLY ALL FIXES',
-                style: AppTypography.label.copyWith(
-                  color: AppColors.base, letterSpacing: 3.0, fontSize: 13,
-                  fontWeight: FontWeight.w900)),
-            ],
+            child: Container(
+              width: double.infinity, height: 58,
+              decoration: BoxDecoration(
+                color: AppColors.red,
+                borderRadius: BorderRadius.circular(Rd.lg),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.red.withValues(alpha: 0.45),
+                    blurRadius: 22, offset: const Offset(0, 6)),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_retrying) ...[
+                    const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                        color: AppColors.base, strokeWidth: 2.2)),
+                    const SizedBox(width: 12),
+                    Text('RENDERING…',
+                      style: AppTypography.label.copyWith(
+                        color: AppColors.base, letterSpacing: 3.0,
+                        fontSize: 13, fontWeight: FontWeight.w900)),
+                  ] else ...[
+                    const Icon(Icons.auto_awesome,
+                      size: 18, color: AppColors.base),
+                    const SizedBox(width: 10),
+                    Text('APPLY ALL FIXES',
+                      style: AppTypography.label.copyWith(
+                        color: AppColors.base, letterSpacing: 3.0,
+                        fontSize: 13, fontWeight: FontWeight.w900)),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
-      ),
+        // Retry error surfaces just below the button — stays visible on
+        // the same screen as the CTA so the user can tap again without
+        // scrolling or navigating.
+        if (_retryError != null) ...[
+          const SizedBox(height: 8),
+          Text(_retryError!,
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.signalAmber, fontSize: 11.5)),
+        ],
+      ],
     );
   }
 
@@ -1146,111 +1163,21 @@ class _Block extends StatelessWidget {
 }
 
 // ── Fix card ──────────────────────────────────────────────────────────────────
-class _FixCard extends StatefulWidget {
+// ── Fix text card — text-only, no inline render ────────────────────────────
+// Previously this card offered a "See it" button that fired /tryon and
+// rendered a per-fix Nano Banana image (three fix cards × one render each =
+// three extra generations per scan, the single biggest cost item in the
+// report). We've pulled that generation out of the report entirely. The
+// hero "Final form" already shows the combined maximized twin; users who
+// want to drill into a single change can do it one at a time via the
+// Mirror chat, which remains the only per-user render surface.
+class _FixTextCard extends StatelessWidget {
   final int index;
   final Fix fix;
-  final Uint8List? capturedBytes;
-  final FaceGeometry geometry;
-  /// Pre-rendered URL from the hero's Flux chain — the cumulative state
-  /// after this fix was applied. When present, the card shows it
-  /// immediately on tap (no extra API call). Falls back to firing /tryon
-  /// only if absent (older scan, chain failure, etc).
-  final String? precomputedUrl;
-  const _FixCard({
-    required this.index, required this.fix,
-    required this.capturedBytes, required this.geometry,
-    this.precomputedUrl,
-  });
-  @override
-  State<_FixCard> createState() => _FixCardState();
-}
-
-class _FixCardState extends State<_FixCard> {
-  String? _renderUrl;
-  bool    _rendering = false;
-  String? _renderError;
-
-  Future<void> _seeIt() async {
-    if (_rendering) return;
-
-    // Fast path — the Flux chain already produced the cumulative image
-    // for this fix as part of /scan. Use it verbatim, no second Flux call.
-    final pre = widget.precomputedUrl;
-    if (pre != null && pre.isNotEmpty) {
-      setState(() {
-        _renderUrl   = pre;
-        _renderError = null;
-      });
-      return;
-    }
-
-    setState(() { _rendering = true; _renderError = null; });
-
-    try {
-      // PROTOCOL vs VISUAL — critical split. `fix.action` is the user's
-      // routine ("Tretinoin 0.025% nightly, moisturize with CeraVe") and
-      // Flux Kontext, being an image model, will render that literally
-      // (cream on the face, bottles in the shot). GPT now returns a
-      // dedicated `visualRequest` that describes only the visible end
-      // state of the face — use that when we have it, and fall back to
-      // the title alone if GPT/older-cache didn't populate it.
-      final style = widget.fix.visualRequest.trim().isNotEmpty
-          ? widget.fix.visualRequest
-          : widget.fix.title;
-      final cat   = _guessCategory(widget.fix.title, widget.fix.action);
-      // Save bytes to disk on-the-fly so TryOnService can load them.
-      final bytes = widget.capturedBytes;
-      String? url;
-      if (bytes != null) {
-        // Inline call — bypass the service's file-path loading by posting
-        // bytes directly. Simpler: reuse the service by saving a temp file.
-        final tempId = 'fix-${DateTime.now().millisecondsSinceEpoch}';
-        final path = await FaceAssetService.saveScanImage(
-          scanId: tempId, bytes: bytes);
-        url = await TryOnService.render(
-          imagePath:    path,
-          styleRequest: style,
-          category:     cat,
-          geometry:     widget.geometry,
-        );
-      }
-      if (!mounted) return;
-      setState(() {
-        _renderUrl = url;
-        _rendering = false;
-        _renderError = url == null ? 'Couldn\'t render — try again' : null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _rendering = false;
-        _renderError = 'Error rendering';
-      });
-    }
-  }
-
-  String _guessCategory(String title, String action) {
-    final t = '$title $action'.toLowerCase();
-    // Order matters — beard/facial-hair keywords often also contain "hair"
-    // ("facial hair"), so check beard first before the haircut regex.
-    if (RegExp(r'\b(beard|stubble|facial hair|goatee|mustache|moustache)\b').hasMatch(t)) return 'beard';
-    if (RegExp(r'\b(brow|eyebrow|browline)\b').hasMatch(t))                               return 'eyebrow';
-    if (RegExp(r'\b(glasses|frame|eyewear|specs)\b').hasMatch(t))                          return 'glasses';
-    if (RegExp(r'\b(skin|acne|pore|texture|tone|retinol|tret|cream|sunscreen|glow|blemish|dark circle|under-eye)\b').hasMatch(t)) return 'skin';
-    if (RegExp(r'\b(teeth|tooth|whiten|bleach|smile)\b').hasMatch(t))                      return 'teeth';
-    if (RegExp(r'\b(color|dye|tint|bleach|highlight)\b').hasMatch(t))                      return 'hair_color';
-    if (RegExp(r'\b(lean|cut|body|weight|fat|recomp|bulk)\b').hasMatch(t))                 return 'weight';
-    if (RegExp(r'\b(hair|fade|crop|cut|fringe|undercut|buzz|trim|taper|hairstyle)\b').hasMatch(t)) return 'haircut';
-    // Fallback: 'generic' (not 'haircut'). A generic fix gets a conservative
-    // preservation clause in tryon.js that locks every feature — safer than
-    // accidentally classifying a jaw-exercise fix as a haircut and shaving
-    // the user's head.
-    return 'generic';
-  }
+  const _FixTextCard({required this.index, required this.fix});
 
   @override
   Widget build(BuildContext context) {
-    final fix = widget.fix;
     return Container(
       margin: const EdgeInsets.only(bottom: Sp.md),
       padding: const EdgeInsets.all(Sp.md),
@@ -1265,7 +1192,7 @@ class _FixCardState extends State<_FixCard> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('${widget.index}',
+              Text('$index',
                 style: AppTypography.h1.copyWith(
                   color: AppColors.accent, fontSize: 28, letterSpacing: -1)),
               const SizedBox(width: Sp.sm),
@@ -1302,78 +1229,12 @@ class _FixCardState extends State<_FixCard> {
               _Chip(label: 'RESCAN DAY ${fix.rescanDay}', color: AppColors.accent),
             ],
           ),
-          const SizedBox(height: Sp.md),
-
-          // "See It" — generates a Flux Kontext render of the user with this change
-          if (_renderUrl != null)
-            GestureDetector(
-              onTap: () => FullscreenImage.open(context,
-                url: _renderUrl, caption: fix.title),
-              child: Container(
-                width: double.infinity,
-                height: 160,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(Rd.md),
-                  border: Border.all(color: AppColors.signalGreen.withValues(alpha: 0.5)),
-                ),
-                child: Image.network(_renderUrl!, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Center(
-                    child: Text('Render unavailable',
-                      style: AppTypography.bodySmall.copyWith(
-                        color: AppColors.textMuted))),
-                ),
-              ),
-            )
-          else
-            SizedBox(
-              width: double.infinity, height: 48,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.signalGreen,
-                  foregroundColor: AppColors.base,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(Rd.md)),
-                ),
-                onPressed: _rendering ? null : _seeIt,
-                child: _rendering
-                  ? const SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.8, color: AppColors.base))
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.auto_awesome,
-                          size: 16, color: AppColors.base),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text('GENERATE IMAGE',
-                              maxLines: 1,
-                              style: AppTypography.label.copyWith(
-                                color: AppColors.base, letterSpacing: 1.6,
-                                fontSize: 12, fontWeight: FontWeight.w900)),
-                          ),
-                        ),
-                      ],
-                    ),
-              ),
-            ),
-          if (_renderError != null) ...[
-            const SizedBox(height: 6),
-            Text(_renderError!,
-              style: AppTypography.bodySmall.copyWith(
-                color: AppColors.signalAmber, fontSize: 11)),
-          ],
         ],
       ),
     );
   }
 }
+
 
 class _Chip extends StatelessWidget {
   final String label;

@@ -1,139 +1,161 @@
 import '../models/face_geometry.dart';
 
-/// Converts raw geometry into Umax-style trait badges — short 2-word names,
-/// emoji, percentile hook. These are the VANITY HITS that make users
-/// screenshot the report.
+/// Converts raw geometry into Umax-style trait badges — short 2-word names
+/// for the grid, emotional shareable one-liners for the hero proof lines.
 ///
 /// Green badges = strengths (vanity flex).  Red badges = honest pulldowns.
-/// The grid is designed to show MORE green than red so users lead with
-/// pride + scroll with purpose. Self-enhancement bias (Alicke) satisfied.
+///
+/// TRAIT SELECTION POLICY
+/// ──────────────────────
+/// Every trait surfaced here is backed by a geometry rule MediaPipe can
+/// measure reliably on a front-pose scan. We deliberately exclude:
+///
+///   · JAW ANGLE traits — MediaPipe's jaw landmarks drift on users with
+///     beards / rounder light (the model reads beard front as jaw line).
+///     Can't stake a "chiseled jaw" flex on a signal that's noisy.
+///   · CHIN PROJECTION traits — same root cause: a thick beard inflates
+///     the read so users with full beards got false STRONG CHIN flags.
+///   · SKIN traits — MediaPipe gives no skin-quality signal at all.
+///     Skin is a GPT-Vision feature, not a geometry one.
+///
+/// Every surviving trait is a real geometric measurement, not a gimmick.
 class TraitBuilderService {
-  /// Returns up to 6 traits, strongest first. Caller typically shows top 4.
+  /// Returns up to 6 traits, strongest first. Caller typically shows top 4
+  /// on the grid and top 3 on the hero proof lines.
   static List<Trait> build(FaceGeometry g) {
     final all = <Trait>[];
 
-    // ── STRENGTHS (green) ────────────────────────────────────────────────
+    // ── STRENGTHS (green) — measured, reliable, emotional ───────────────
+
+    // Canthal tilt — positive = "hunter eyes". MediaPipe reads this well
+    // (lateral canthus landmark is very stable).
     if (g.canthalTilt >= 2.0) {
+      final (pct, beats) = _tierFromCanthal(g.canthalTilt);
       all.add(Trait(
         name: 'HUNTER EYES',
         emoji: '👁️',
         detail: '+${g.canthalTilt.toStringAsFixed(1)}° TILT',
-        pct: _pctFromCanthal(g.canthalTilt),
+        pct: pct,
+        heroLine: 'Your hunter eyes beat $beats of men',
         kind: TraitKind.strength,
-        score: (g.canthalTilt / 5.0).clamp(0.0, 1.0),
+        score: ((g.canthalTilt - 2.0) / 3.0 * 0.5 + 0.5).clamp(0.0, 1.0),
       ));
     }
-    if (g.jawAngle <= 122) {
+
+    // Facial symmetry — derived from mirrored landmark distances. Stable
+    // enough to surface, but we raise the bar to >=85 so only genuinely
+    // symmetric faces earn the flex.
+    if (g.symmetryScore >= 85) {
+      final (pct, beats) = _tierFromSymmetry(g.symmetryScore);
       all.add(Trait(
-        name: 'CHISELED JAW',
-        emoji: '⬢',
-        detail: '${g.jawAngle.toStringAsFixed(0)}° ANGLE',
-        pct: _pctFromJaw(g.jawAngle),
-        kind: TraitKind.strength,
-        score: ((125 - g.jawAngle) / 15).clamp(0.0, 1.0),
-      ));
-    }
-    if (g.symmetryScore >= 80) {
-      all.add(Trait(
-        name: 'SYMMETRIC',
+        name: 'RARE SYMMETRY',
         emoji: '◇',
         detail: '${g.symmetryScore.toStringAsFixed(0)} / 100',
-        pct: _pctFromSymmetry(g.symmetryScore),
+        pct: pct,
+        heroLine: 'Symmetry rarer than $beats of men',
         kind: TraitKind.strength,
-        score: (g.symmetryScore / 100).clamp(0.0, 1.0),
+        score: ((g.symmetryScore - 85) / 10.0 * 0.45 + 0.55).clamp(0.0, 1.0),
       ));
     }
+
+    // Lip fullness — sweet-spot signal. Area ratio from upper-lip +
+    // lower-lip landmarks; stable across lighting.
     if (g.lipFullness >= 0.45 && g.lipFullness <= 0.70) {
       all.add(Trait(
         name: 'MODEL LIPS',
         emoji: '◖',
         detail: 'BALANCED FULLNESS',
-        pct: _pctFromLips(g.lipFullness),
+        pct: 'TOP 18%',
+        heroLine: 'Proportioned lips — golden ratio',
         kind: TraitKind.strength,
-        score: 0.85,
+        // Closer to ideal 0.56 = higher score, capped at 0.85 so measured
+        // elite metrics (tilt, symmetry) can still beat a sweet-spot trait.
+        score: (0.85 - (g.lipFullness - 0.56).abs() * 2).clamp(0.55, 0.85),
       ));
     }
+
+    // Face width-to-height ratio — "dominance" signal. Measured across
+    // zygomatic width and bizygomatic-to-lower-lip height. Reliable.
     if (g.fwhr >= 1.80 && g.fwhr <= 2.00) {
+      final pct = g.fwhr >= 1.87 && g.fwhr <= 1.95 ? 'TOP 8%' : 'TOP 22%';
       all.add(Trait(
-        name: 'MODEL FWHR',
+        name: 'DOMINANT FRAME',
         emoji: '▣',
         detail: g.fwhr.toStringAsFixed(2),
-        pct: _pctFromFwhr(g.fwhr),
+        pct: pct,
+        heroLine: 'Dominant face frame — $pct',
         kind: TraitKind.strength,
-        score: 0.82,
+        score: (0.85 - (g.fwhr - 1.91).abs() * 0.8).clamp(0.55, 0.85),
       ));
     }
+
+    // Facial thirds — golden-ratio proportion. Each third lands near
+    // 33.33% of total face height. Very stable signal (landmarks at
+    // hairline, brow, nose base, chin are all well-anchored).
     final thirdsDev = ((g.facialThirdTop - 33.33).abs()
                     + (g.facialThirdMid - 33.33).abs()
                     + (g.facialThirdLow - 33.33).abs()) / 3;
-    if (thirdsDev <= 2.5) {
+    if (thirdsDev <= 2.0) {
+      final pct = thirdsDev <= 1.5 ? 'TOP 6%' : 'TOP 18%';
       all.add(Trait(
-        name: 'BALANCED THIRDS',
+        name: 'GOLDEN THIRDS',
         emoji: '═',
         detail: '${g.facialThirdTop.toStringAsFixed(0)}/${g.facialThirdMid.toStringAsFixed(0)}/${g.facialThirdLow.toStringAsFixed(0)}',
-        pct: _pctFromThirds(thirdsDev),
+        pct: pct,
+        heroLine: 'Golden-ratio thirds — $pct',
         kind: TraitKind.strength,
-        score: ((3 - thirdsDev) / 3).clamp(0.0, 1.0),
+        score: ((2.0 - thirdsDev) / 2.0 * 0.45 + 0.55).clamp(0.55, 1.0),
       ));
     }
-    if (g.chinProjection >= 0.28) {
-      all.add(Trait(
-        name: 'STRONG CHIN',
-        emoji: '▽',
-        detail: '${(g.chinProjection * 10).toStringAsFixed(1)} mm',
-        pct: _pctFromChin(g.chinProjection),
-        kind: TraitKind.strength,
-        score: (g.chinProjection / 0.4).clamp(0.0, 1.0),
-      ));
-    }
+
+    // Brow-to-eye gap — tight spacing reads as masculine/dominant.
+    // Landmarks here are stable.
     if (g.brow2EyeGap < 0.03) {
       all.add(Trait(
         name: 'DOMINANT BROW',
         emoji: '⌃',
         detail: 'TIGHT LID SPACING',
         pct: 'TOP 15%',
+        heroLine: 'Dominant brow — top 15%',
         kind: TraitKind.strength,
-        score: 0.80,
+        score: 0.65,
       ));
     }
 
-    // ── PULLDOWNS (red) ─────────────────────────────────────────────────
+    // Eye spacing — ideal inter-canthal at roughly 0.46 of face width.
+    // Reliable, adds a strength path when others miss.
+    if (g.eyeSpacingRatio >= 0.44 && g.eyeSpacingRatio <= 0.48) {
+      all.add(Trait(
+        name: 'IDEAL EYE SPACING',
+        emoji: '◉',
+        detail: g.eyeSpacingRatio.toStringAsFixed(2),
+        pct: 'TOP 20%',
+        heroLine: 'Ideal eye spacing — top 20%',
+        kind: TraitKind.strength,
+        score: 0.62,
+      ));
+    }
+
+    // ── PULLDOWNS (red) — also rephrased for emotional punch ────────────
+
     if (g.faceLengthRatio > 1.38) {
       all.add(Trait(
         name: 'LONG FACE',
         emoji: '↕',
         detail: g.faceLengthRatio.toStringAsFixed(2),
         pct: 'COMPRESS WITH CUT',
-        kind: TraitKind.pulldown,
-        score: 0.3,
-      ));
-    }
-    if (g.jawAngle > 130) {
-      all.add(Trait(
-        name: 'SOFT JAW',
-        emoji: '◯',
-        detail: '${g.jawAngle.toStringAsFixed(0)}° ANGLE',
-        pct: 'BEARD + BF CUT',
-        kind: TraitKind.pulldown,
-        score: 0.25,
-      ));
-    }
-    if (g.chinProjection < 0.18) {
-      all.add(Trait(
-        name: 'RETRUSIVE CHIN',
-        emoji: '◁',
-        detail: '${(g.chinProjection * 10).toStringAsFixed(1)} mm',
-        pct: 'SQUARED BEARD HELPS',
+        heroLine: 'Long face proportions — compress vertically',
         kind: TraitKind.pulldown,
         score: 0.3,
       ));
     }
     if (g.symmetryScore < 72) {
       all.add(Trait(
-        name: 'ASYMMETRIC',
+        name: 'SLIGHT ASYMMETRY',
         emoji: '◈',
         detail: '${g.symmetryScore.toStringAsFixed(0)} / 100',
         pct: 'POSTURE FIX',
+        heroLine: 'Slight asymmetry — posture fixes most of it',
         kind: TraitKind.pulldown,
         score: 0.4,
       ));
@@ -141,10 +163,11 @@ class TraitBuilderService {
     if (thirdsDev > 4) {
       if (g.facialThirdTop > 36) {
         all.add(Trait(
-          name: 'LONG FOREHEAD',
+          name: 'HIGH FOREHEAD',
           emoji: '▔',
           detail: '${g.facialThirdTop.toStringAsFixed(0)}% UPPER',
           pct: 'LOWER FRINGE',
+          heroLine: 'High forehead — a lower fringe rebalances',
           kind: TraitKind.pulldown,
           score: 0.35,
         ));
@@ -154,6 +177,7 @@ class TraitBuilderService {
           emoji: '▂',
           detail: '${g.facialThirdLow.toStringAsFixed(0)}% LOWER',
           pct: 'SQUARED BEARD',
+          heroLine: 'Long lower third — squared beard frame balances',
           kind: TraitKind.pulldown,
           score: 0.35,
         ));
@@ -172,57 +196,48 @@ class TraitBuilderService {
     return all.take(6).toList();
   }
 
-  // ── Percentile labels — rough but reads as real ─────────────────────────
-  static String _pctFromCanthal(double t) {
-    if (t >= 5.0) return 'TOP 3%';
-    if (t >= 4.0) return 'TOP 7%';
-    if (t >= 3.0) return 'TOP 12%';
-    if (t >= 2.0) return 'TOP 20%';
-    return 'TOP 35%';
+  // ── Emotional tier helpers ──────────────────────────────────────────────
+  //
+  // Each returns (percentile-label, "beats Y%-of-men" string) so the hero
+  // proof line can render "Your hunter eyes beat 97% of men" directly. Tiers
+  // are intentionally coarse — readers want a round number, not decimals.
+
+  static (String, String) _tierFromCanthal(double t) {
+    if (t >= 5.0) return ('TOP 3%',  '97%');
+    if (t >= 4.0) return ('TOP 7%',  '93%');
+    if (t >= 3.0) return ('TOP 12%', '88%');
+    if (t >= 2.5) return ('TOP 18%', '82%');
+    return          ('TOP 25%', '75%');
   }
-  static String _pctFromJaw(double a) {
-    if (a <= 114) return 'TOP 4%';
-    if (a <= 118) return 'TOP 9%';
-    if (a <= 122) return 'TOP 18%';
-    return 'TOP 30%';
-  }
-  static String _pctFromSymmetry(double s) {
-    if (s >= 90) return 'TOP 5%';
-    if (s >= 85) return 'TOP 13%';
-    if (s >= 80) return 'TOP 24%';
-    return 'TOP 40%';
-  }
-  static String _pctFromLips(double l) => 'TOP 18%';
-  static String _pctFromFwhr(double f) {
-    if (f >= 1.87 && f <= 1.95) return 'TOP 8%';
-    return 'TOP 22%';
-  }
-  static String _pctFromThirds(double dev) {
-    if (dev <= 1.5) return 'TOP 6%';
-    return 'TOP 18%';
-  }
-  static String _pctFromChin(double c) {
-    if (c >= 0.35) return 'TOP 8%';
-    if (c >= 0.28) return 'TOP 17%';
-    return 'TOP 28%';
+
+  static (String, String) _tierFromSymmetry(double s) {
+    if (s >= 92) return ('TOP 3%',  '97%');
+    if (s >= 88) return ('TOP 8%',  '92%');
+    if (s >= 85) return ('TOP 15%', '85%');
+    return         ('TOP 25%', '75%');
   }
 }
 
 enum TraitKind { strength, pulldown }
 
 class Trait {
-  final String name;      // "HUNTER EYES"
-  final String emoji;     // "👁️"
-  final String detail;    // "+3.1° TILT"
-  final String pct;       // "TOP 12%"
+  final String name;       // "HUNTER EYES" — short grid label
+  final String emoji;      // "👁️"
+  final String detail;     // "+3.1° TILT" — measurement under the name
+  final String pct;        // "TOP 12%" — percentile badge
+  /// Ready-to-render emotional one-liner for the hero proof lines.
+  /// "Your hunter eyes beat 88% of men." — punchier + more shareable than
+  /// "TOP 12% HUNTER EYES" and meant to be screenshot-worthy on its own.
+  final String heroLine;
   final TraitKind kind;
-  final double score;     // 0..1 — for sorting + visual intensity
+  final double score;      // 0..1 — for sorting + visual intensity
 
   const Trait({
     required this.name,
     required this.emoji,
     required this.detail,
     required this.pct,
+    required this.heroLine,
     required this.kind,
     required this.score,
   });
