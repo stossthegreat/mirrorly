@@ -16,19 +16,11 @@ dependencies:
   camera: 0.10.5+5
   google_mlkit_face_detection: ^0.13.0
   # Android-only — Google explicitly states this plugin's iOS impl is
-  # "still in beta and only available for Android". So Android uses this
-  # for the dense 468-point mesh, and iOS uses `mediapipe_face_mesh`
-  # below (a community wrapper around Google's official MediaPipe
-  # Tasks Vision iOS framework — same model, same output, same density,
-  # just a different transport).
+  # "still in beta and only available for Android". On iOS we synthesise
+  # an equivalent dense overlay from face contours via _buildSemanticMesh
+  # in scan_screen.dart, populating canonical MediaPipe indices from ML
+  # Kit contour data. No third-party iOS face-mesh dependency.
   google_mlkit_face_mesh_detection: ^0.4.2
-  # iOS dense-mesh source. Wraps Google's MediaPipeTasksVision native
-  # iOS framework via TFLite. Returns the same 468 normalized 3D
-  # landmarks the Android ML Kit plugin returns. Brand-new package —
-  # if it breaks on first build, fall back to writing a native Swift
-  # plugin around MPPFaceLandmarker directly. See
-  # IosFaceMeshService for the integration surface.
-  mediapipe_face_mesh: ^1.3.2
   provider: ^6.1.2
   http: ^1.2.0
   image: ^4.2.0

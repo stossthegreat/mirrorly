@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
@@ -13,7 +14,6 @@ import 'package:image/image.dart' as img;
 import '../../models/face_geometry.dart';
 import '../../services/face_geometry_service.dart';
 import '../../services/face_mesh_service.dart';
-import '../../services/ios_face_mesh_service.dart';
 import '../../services/local_store_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
@@ -31,12 +31,12 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
   CameraController? _camera;
   FaceDetector?     _faceDetector;
   // Per-platform dense-mesh sources. Android uses Google ML Kit's
-  // face mesh detector (Android-only plugin). iOS uses the
-  // mediapipe_face_mesh community wrapper around Google's official
-  // MediaPipe Tasks Vision iOS framework. Only one of these is
-  // populated per build — the other stays null.
-  FaceMeshService?     _meshService;
-  IosFaceMeshService?  _iosMeshService;
+  // face mesh detector (Android-only plugin). On iOS we don't run a
+  // third-party detector — _buildSemanticMesh below synthesises a
+  // dense canonical-MediaPipe-indexed mesh from ML Kit's face
+  // contours, which the painter renders identically to the Android
+  // path.
+  FaceMeshService?  _meshService;
 
   // Image orientation snapshot taken at init, reused for every frame's point
   // transform so landmarks rotate/mirror into the same space as the preview.
@@ -138,20 +138,14 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
               ?? InputImageRotation.rotation270deg);
     _isFrontCam = front.lensDirection == CameraLensDirection.front;
 
-    // Dense mesh source — picks the right native runtime per platform.
-    //   Android → google_mlkit_face_mesh_detection (Google's ML Kit, 468 pts)
-    //   iOS     → mediapipe_face_mesh (Google's MediaPipe Tasks Vision, 478 pts)
-    // Both produce a `FaceMesh` of normalized 0..1 Offsets at the same
-    // canonical MediaPipe indices, so the painter is platform-agnostic.
+    // Android gets the full 468-point mesh via google_mlkit_face_mesh_detection
+    // (Android-only plugin). iOS doesn't get a separate detector — instead
+    // _buildSemanticMesh synthesises a dense canonical-MediaPipe-indexed
+    // mesh from ML Kit contour data so the painter renders identically.
     if (Platform.isAndroid) {
-      _meshService    = FaceMeshService();
-      _iosMeshService = null;
-    } else if (Platform.isIOS) {
-      _meshService    = null;
-      _iosMeshService = IosFaceMeshService();
+      _meshService = FaceMeshService();
     } else {
-      _meshService    = null;
-      _iosMeshService = null;
+      _meshService = null;
     }
 
     // Canonical Flutter + ML Kit setup — per google_mlkit_commons README:
@@ -262,36 +256,53 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
   /// can't run google_mlkit_face_mesh_detection (Android-only plugin),
   /// so the painter — which indexes into canonical MediaPipe positions
   /// like `idxLeftEyeOuter = 33`, `idxChin = 152`, the 36 face-oval
-  /// indices — used to render almost nothing on iOS (`points.length <
-  /// 200 return`). This builder backfills: it places the right semantic
-  /// landmarks at the right MediaPipe indices using ML Kit's contour
-  /// + landmark API, so anchor-driven painter layers (silhouette glow,
-  /// live measurement rails, floating measurements, feature beam,
-  /// constellation) light up on iOS too.
+  /// indices, and the chain indices used by the bone-structure layer
+  /// — used to render almost nothing on iOS. This builder backfills:
+  /// it maps ML Kit's contours onto the canonical MediaPipe indices
+  /// the painter consumes, so EVERY layer (silhouette glow, live
+  /// measurement rails, floating measurements, feature beam,
+  /// constellation, bone structure, measurement arcs, mesh dots)
+  /// renders identically on iOS.
   ///
-  /// Topology-dependent layers (bone structure with arbitrary chains,
-  /// measurement arcs at obscure indices) still need a real 468-point
-  /// mesh — those are gated by `_denseMesh` upstream.
-  ///
-  /// Out-of-canvas sentinel for unmapped indices means painters that
-  /// loop with `if (i >= points.length) continue` or per-point bounds
-  /// checks render correctly without drawing junk in the middle of the
-  /// face.
+  /// Out-of-canvas sentinel for unmapped indices means painter helpers
+  /// that filter via per-point bounds checks render correctly without
+  /// drawing junk in the middle of the face.
   FaceMesh? _buildSemanticMesh(Face face, double imgW, double imgH) {
-    final faceOval   = face.contours[FaceContourType.face]?.points ?? [];
-    final leftEye    = face.contours[FaceContourType.leftEye]?.points ?? [];
-    final rightEye   = face.contours[FaceContourType.rightEye]?.points ?? [];
-    final noseBridge = face.contours[FaceContourType.noseBridge]?.points ?? [];
+    final faceOval        = face.contours[FaceContourType.face]?.points ?? [];
+    final leftEye         = face.contours[FaceContourType.leftEye]?.points ?? [];
+    final rightEye        = face.contours[FaceContourType.rightEye]?.points ?? [];
+    final noseBridge      = face.contours[FaceContourType.noseBridge]?.points ?? [];
+    final noseBottom      = face.contours[FaceContourType.noseBottom]?.points ?? [];
+    final leftEyebrowTop  = face.contours[FaceContourType.leftEyebrowTop]?.points ?? [];
+    final rightEyebrowTop = face.contours[FaceContourType.rightEyebrowTop]?.points ?? [];
+    final upperLipTop     = face.contours[FaceContourType.upperLipTop]?.points ?? [];
+    final lowerLipBottom  = face.contours[FaceContourType.lowerLipBottom]?.points ?? [];
 
     if (faceOval.length < 8) return null;
 
     Offset norm(num x, num y) =>
         _normalize(x.toDouble(), y.toDouble(), imgW, imgH);
 
-    // 500 covers every canonical index the painter touches (max 454).
-    // Off-canvas sentinel keeps unmapped indices visually inert.
+    // 500 covers every canonical index the painter touches. Off-canvas
+    // sentinel keeps unmapped indices visually inert (the painter's
+    // bounds-check filters them out before drawing).
     const sentinel = Offset(-10, -10);
     final pts = List<Offset>.filled(500, sentinel);
+
+    /// Spread an ordered ML Kit contour over a list of canonical MediaPipe
+    /// indices. Linearly samples the source contour at evenly spaced
+    /// positions along its length so a 16-point contour can fill a
+    /// 17-index chain without creating duplicate-stacked dots.
+    void spread(List<dynamic> src, List<int> dstIdx) {
+      if (src.isEmpty || dstIdx.isEmpty) return;
+      final n = src.length;
+      for (var i = 0; i < dstIdx.length; i++) {
+        final t = i / math.max(1, dstIdx.length - 1);
+        final s = (t * (n - 1)).round().clamp(0, n - 1);
+        final p = src[s];
+        pts[dstIdx[i]] = norm(p.x, p.y);
+      }
+    }
 
     // Face-oval extremes → cardinal anchors.
     var topI = 0, botI = 0, leftI = 0, rightI = 0;
@@ -324,9 +335,7 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
       pts[FaceMesh.idxNoseTip] = norm(tip.x, tip.y);
     }
 
-    // Distribute the 36 ML Kit face-oval points across the 36 canonical
-    // MediaPipe face-oval indices, starting from the top and going
-    // clockwise. ML Kit's oval is already roughly clockwise-ordered.
+    // ── Face oval ─ canonical MediaPipe oval indices clockwise from top.
     const ovalCanonical = [
       10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
       397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
@@ -337,6 +346,124 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
       final src = (topI + (i * n / ovalCanonical.length).round()) % n;
       final p = faceOval[src];
       pts[ovalCanonical[i]] = norm(p.x, p.y);
+    }
+
+    // ── Mandible chain (bone structure layer) — already covered by oval.
+    // Indices 234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152, 377,
+    // 400, 378, 379, 365, 397, 288, 361, 323, 454 are all in ovalCanonical
+    // above, so the bone-structure jaw chain renders unchanged.
+
+    // ── Zygomatic L / R (cheekbone shelf) — straight diagonal sweep
+    // from the cheek extreme inward and slightly down to a point on
+    // the lower jaw line. Linear-interp gives the bone-structure layer
+    // a real cheekbone bracket rather than a flat horizontal.
+    void linearChain(Offset a, Offset b, List<int> dst) {
+      for (var i = 0; i < dst.length; i++) {
+        final t = i / math.max(1, dst.length - 1);
+        pts[dst[i]] = Offset(a.dx + (b.dx - a.dx) * t,
+                             a.dy + (b.dy - a.dy) * t);
+      }
+    }
+    final cheekLOff = norm(faceOval[leftI].x, faceOval[leftI].y);
+    final cheekROff = norm(faceOval[rightI].x, faceOval[rightI].y);
+    final lJawSrc = faceOval[(leftI + n ~/ 12) % n];
+    final rJawSrc = faceOval[(rightI - n ~/ 12 + n) % n];
+    linearChain(cheekLOff, norm(lJawSrc.x, lJawSrc.y),
+        const [234, 227, 116, 123, 117, 118, 101]);
+    linearChain(cheekROff, norm(rJawSrc.x, rJawSrc.y),
+        const [454, 447, 345, 352, 346, 347, 330]);
+
+    // ── Orbital frames L / R — full eye-socket trace. ML Kit gives
+    // ~16 points per eye contour, the canonical chain has 17 indices —
+    // spread() handles the resampling.
+    if (leftEye.length >= 4) {
+      spread(leftEye, const [
+        33, 246, 161, 160, 159, 158, 157, 173, 133, 155,
+        154, 153, 145, 144, 163, 7, 33,
+      ]);
+    }
+    if (rightEye.length >= 4) {
+      spread(rightEye, const [
+        263, 466, 388, 387, 386, 385, 384, 398, 362, 382,
+        381, 380, 374, 373, 390, 249, 263,
+      ]);
+    }
+
+    // ── Frontal bone sweep — combine left + center + right brow points.
+    if (leftEyebrowTop.length >= 3 && rightEyebrowTop.length >= 3) {
+      // Brow indices on the chain: 70, 63, 105, 66, 107 (left) → 9 (center) →
+      // 336, 296, 334, 293, 300 (right). Sample left, set 9 to the brow
+      // midpoint between the two innermost points, then right.
+      spread(leftEyebrowTop,  const [70, 63, 105, 66, 107]);
+      spread(rightEyebrowTop, const [336, 296, 334, 293, 300]);
+      final lInner = leftEyebrowTop.last;
+      final rInner = rightEyebrowTop.last;
+      pts[9] = norm((lInner.x + rInner.x) / 2, (lInner.y + rInner.y) / 2);
+    }
+
+    // ── Nose bridge — chain (168, 6, 197, 195, 5, 4, 1).
+    if (noseBridge.length >= 3) {
+      spread(noseBridge, const [168, 6, 197, 195, 5, 4, 1]);
+    } else if (noseBottom.isNotEmpty && pts[10].dx >= 0) {
+      // Fallback — interpolate between forehead and noseBottom centroid.
+      final cx = noseBottom.map((p) => p.x).reduce((a, b) => a + b) / noseBottom.length;
+      final cy = noseBottom.map((p) => p.y).reduce((a, b) => a + b) / noseBottom.length;
+      final tipN = norm(cx, cy);
+      const bridge = [168, 6, 197, 195, 5, 4, 1];
+      for (var i = 0; i < bridge.length; i++) {
+        final t = i / (bridge.length - 1);
+        pts[bridge[i]] = Offset(
+          pts[10].dx + (tipN.dx - pts[10].dx) * t,
+          pts[10].dy + (tipN.dy - pts[10].dy) * t);
+      }
+    }
+
+    // ── Chin vector (152, 175, 199, 200, 18) — extends from chin point
+    // up toward the lower lip. We have 152 from the face oval; place 18
+    // at the lower-lip-bottom centroid and interpolate the rest.
+    if (lowerLipBottom.isNotEmpty) {
+      final cx = lowerLipBottom.map((p) => p.x).reduce((a, b) => a + b) / lowerLipBottom.length;
+      final cy = lowerLipBottom.map((p) => p.y).reduce((a, b) => a + b) / lowerLipBottom.length;
+      final lipN = norm(cx, cy);
+      pts[18] = lipN;
+      const chinChain = [152, 175, 199, 200, 18];
+      for (var i = 1; i < chinChain.length - 1; i++) {
+        final t = i / (chinChain.length - 1);
+        pts[chinChain[i]] = Offset(
+          pts[152].dx + (lipN.dx - pts[152].dx) * t,
+          pts[152].dy + (lipN.dy - pts[152].dy) * t);
+      }
+    }
+
+    // ── Lip outline — used by mesh-dot density and constellation.
+    if (upperLipTop.length >= 3) {
+      spread(upperLipTop, const [61, 78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 291]);
+    }
+
+    // ── Cheek interpolation — fills additional dot density across the
+    // cheek areas so _drawMeshDots reads as a uniform face mesh.
+    // Indices roughly correspond to MediaPipe cheek mesh points.
+    if (pts[FaceMesh.idxCheekL].dx >= 0 && pts[FaceMesh.idxLeftEyeOuter].dx >= 0) {
+      final eyeL = pts[FaceMesh.idxLeftEyeOuter];
+      final cheekL = pts[FaceMesh.idxCheekL];
+      const leftCheekFill = [50, 36, 205, 187, 207, 213, 192];
+      for (var i = 0; i < leftCheekFill.length; i++) {
+        final t = (i + 1) / (leftCheekFill.length + 1);
+        pts[leftCheekFill[i]] = Offset(
+          eyeL.dx + (cheekL.dx - eyeL.dx) * t,
+          eyeL.dy + (cheekL.dy - eyeL.dy) * t);
+      }
+    }
+    if (pts[FaceMesh.idxCheekR].dx >= 0 && pts[FaceMesh.idxRightEyeOuter].dx >= 0) {
+      final eyeR = pts[FaceMesh.idxRightEyeOuter];
+      final cheekR = pts[FaceMesh.idxCheekR];
+      const rightCheekFill = [280, 266, 425, 411, 427, 433, 416];
+      for (var i = 0; i < rightCheekFill.length; i++) {
+        final t = (i + 1) / (rightCheekFill.length + 1);
+        pts[rightCheekFill[i]] = Offset(
+          eyeR.dx + (cheekR.dx - eyeR.dx) * t,
+          eyeR.dy + (cheekR.dy - eyeR.dy) * t);
+      }
     }
 
     return FaceMesh(pts);
@@ -377,23 +504,6 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
           mesh = await _meshService!.detect(
             inputImage,
             (x, y) => _normalize(x, y, imgW, imgH),
-          );
-        } catch (_) {}
-      } else if (_iosMeshService != null) {
-        // iOS path — feed the BGRA8888 frame directly to MediaPipe.
-        // Rotation degrees: iOS frames arrive in sensor orientation,
-        // so pass the raw sensorOrientation to MediaPipe so it knows
-        // how to rotate before inference.
-        // Mirror horizontal: front cam preview is auto-mirrored on
-        // iOS at the platform level — we want the mesh coordinates to
-        // match the mirrored preview, so request mirrored output.
-        final cam = _camera?.description;
-        final rotDeg = cam?.sensorOrientation ?? 0;
-        try {
-          mesh = await _iosMeshService!.detect(
-            image:            image,
-            rotationDegrees:  rotDeg,
-            mirrorHorizontal: _isFrontCam,
           );
         } catch (_) {}
       }
@@ -865,7 +975,6 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     _camera?.dispose();
     _faceDetector?.close();
     _meshService?.close();
-    _iosMeshService?.close();
     super.dispose();
   }
 

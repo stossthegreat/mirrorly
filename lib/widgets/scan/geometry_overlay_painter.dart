@@ -506,6 +506,9 @@ class GeometryOverlayPainter extends CustomPainter {
 
     for (var i = 0; i < points.length; i++) {
       final p = points[i];
+      // Skip the iOS semantic-mesh sentinel so unpopulated canonical
+      // MediaPipe slots don't paint stray dots off the canvas edge.
+      if (p.dx < 0 || p.dx > 1 || p.dy < 0 || p.dy > 1) continue;
       final x = p.dx * size.width;
       final y = p.dy * size.height;
 
@@ -619,23 +622,23 @@ class GeometryOverlayPainter extends CustomPainter {
     bool pulseBoost = false,
     bool dramatic   = false,
   }) {
-    // Bone structure draws polylines through arbitrary MediaPipe indices
-    // (chain([10, 152, 234, 454, ...])). Without a real 468-point mesh
-    // those indices land on whichever points happen to live in the
-    // iOS contour-fallback list, producing a plate of garbage lines.
-    // Keep this Android-only.
-    if (!denseMesh) return;
     final points = mesh!.points;
-    if (points.length < 200) return;
+    if (points.isEmpty) return;
 
     final reveal = phase == ScanPhase.measuring
         ? ((progress - 0.05) / 0.8).clamp(0.0, 1.0)
         : 1.0;
     if (reveal <= 0) return;
 
+    // px() filters sentinel placeholders (out-of-canvas coords used by
+    // the iOS semantic mesh for unmapped indices) so chains drawn from
+    // MediaPipe topology don't include invisible far-off points.
+    // chain() iterates whatever survives, so iOS chains end up shorter
+    // but still draw the segments where data exists.
     Offset? px(int i) {
       if (i >= points.length) return null;
       final p = points[i];
+      if (p.dx < 0 || p.dx > 1 || p.dy < 0 || p.dy > 1) return null;
       return Offset(p.dx * size.width, p.dy * size.height);
     }
 
@@ -1095,12 +1098,8 @@ class GeometryOverlayPainter extends CustomPainter {
   //  This makes the "we measured you" feel VISIBLE, not just numerical.
   // ═══════════════════════════════════════════════════════════════════════════
   void _drawMeasurementArcs(Canvas canvas, Size size) {
-    // Arcs hang off obscure jaw / cheek mesh indices (172, 397, 288, 58)
-    // that aren't in the iOS semantic-mesh anchor set. Without dense
-    // mesh they'd render at the off-canvas sentinel — gate to Android.
-    if (!denseMesh) return;
     final points = mesh!.points;
-    if (points.length < 200) return;
+    if (points.isEmpty) return;
 
     final reveal = ((progress - 0.40) / 0.50).clamp(0.0, 1.0);
     if (reveal <= 0) return;
@@ -1108,6 +1107,9 @@ class GeometryOverlayPainter extends CustomPainter {
     Offset? px(int i) {
       if (i >= points.length) return null;
       final p = points[i];
+      // Filter the iOS semantic-mesh sentinel so arcs aren't anchored
+      // to off-canvas points when an index is unpopulated.
+      if (p.dx < 0 || p.dx > 1 || p.dy < 0 || p.dy > 1) return null;
       return Offset(p.dx * size.width, p.dy * size.height);
     }
 
