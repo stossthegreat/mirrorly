@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../models/face_geometry.dart';
 import '../../services/face_mesh_service.dart';
 
 /// Multi-angle Face-ID-style scan. Front, then left 3/4, then right 3/4 —
@@ -51,15 +52,18 @@ class GeometryOverlayPainter extends CustomPainter {
   // direction. Caller passes `Platform.isAndroid` here.
   final bool mirrorLR;
 
-  // True when the upstream produced a real 468-point MediaPipe mesh
-  // (Android only). Topology-dependent layers (bone structure, arc
-  // measurements) reach into obscure mesh indices and must be skipped
-  // when this is false — otherwise they draw garbage through whatever
-  // happens to live at those indices in the iOS contour-fallback list.
-  // Anchor-driven layers (silhouette glow, live rails, floating
-  // readouts, feature beam, constellation) work in both modes since
-  // _buildSemanticMesh on iOS populates the canonical anchor indices.
+  // Informational — true when the upstream produced a real 468-point
+  // MediaPipe mesh (Android). iOS produces a synthesised semantic mesh
+  // from contours instead. No layer currently gates on this — left as
+  // a hint for future features that genuinely need real topology.
   final bool denseMesh;
+
+  // Real measured geometry from FaceGeometryService.computeGeometry,
+  // recomputed each frame in scan_screen. The painter uses these
+  // values for the live HUD readouts (rails, floating measurements,
+  // bottom marquee) so what the user sees is what the report will
+  // analyse — not a sine-wave decoration.
+  final FaceGeometry? geometry;
 
   const GeometryOverlayPainter({
     required this.mesh,
@@ -73,6 +77,7 @@ class GeometryOverlayPainter extends CustomPainter {
     this.holdProgress = 0,
     this.mirrorLR = false,
     this.denseMesh = false,
+    this.geometry,
   });
 
   // ── Palette ───────────────────────────────────────────────────────────────
@@ -840,13 +845,16 @@ class GeometryOverlayPainter extends CustomPainter {
       return Offset(p.dx * size.width, p.dy * size.height);
     }
 
-    // Fake-live values modulated by animT — visually sell the precision.
-    // Real values come from backend /analyse.
-    final canthal = (3.0 + math.sin(animT * 2.1) * 0.12);
-    final jaw     = (118 + math.sin(animT * 1.6) * 0.6);
-    final fwhr    = (1.87 + math.sin(animT * 1.9) * 0.015);
-    final sym     = (87 + math.sin(animT * 1.3) * 0.8);
-    final nose    = (0.34 + math.sin(animT * 1.5) * 0.008);
+    // Real measurements from this frame's FaceGeometryService pass.
+    // Geometry can be null briefly between the first frame's mesh
+    // arriving and the geometry being computed — fall back to a
+    // small idle wobble so the rails don't blink to zero.
+    final g = geometry;
+    final canthal = g?.canthalTilt        ?? (math.sin(animT * 2.1) * 0.12);
+    final jaw     = g?.jawAngle           ?? (118 + math.sin(animT * 1.6) * 0.6);
+    final fwhr    = g?.fwhr               ?? (1.87 + math.sin(animT * 1.9) * 0.015);
+    final sym     = g?.symmetryScore      ?? (87 + math.sin(animT * 1.3) * 0.8);
+    final nose    = g?.noseLengthRatio    ?? (0.34 + math.sin(animT * 1.5) * 0.008);
 
     // 5 rails — each: (anchor index, left-side boolean, label text, delay)
     final rails = <({int anchor, bool leftSide, String label, double delayFrac})>[
@@ -1485,12 +1493,14 @@ class GeometryOverlayPainter extends CustomPainter {
       return Offset(p.dx * size.width, p.dy * size.height);
     }
 
-    // Fake-live values modulated so they feel alive. These visually SELL
-    // the precision — the verdict/real data in the report comes from backend.
-    final canthal = (3.0 + math.sin(animT * 2.1) * 0.12);
-    final jaw     = (118 + math.sin(animT * 1.6) * 0.6);
-    final fwhr    = (1.87 + math.sin(animT * 1.9) * 0.015);
-    final sym     = (87  + math.sin(animT * 1.3) * 0.8);
+    // Real measurements from FaceGeometryService.computeGeometry, fed
+    // in by scan_screen each frame. Idle fallback only fires before
+    // the first geometry pass lands.
+    final g = geometry;
+    final canthal = g?.canthalTilt   ?? (math.sin(animT * 2.1) * 0.12);
+    final jaw     = g?.jawAngle      ?? (118 + math.sin(animT * 1.6) * 0.6);
+    final fwhr    = g?.fwhr          ?? (1.87 + math.sin(animT * 1.9) * 0.015);
+    final sym     = g?.symmetryScore ?? (87 + math.sin(animT * 1.3) * 0.8);
 
     final readouts = <(Offset?, String, double)>[
       (px(FaceMesh.idxLeftEyeOuter),  'CANTHAL ${canthal.toStringAsFixed(2)}°', 0.00),
@@ -1832,14 +1842,27 @@ class GeometryOverlayPainter extends CustomPainter {
     // Near the bottom edge, above the phase HUD.
     final y = size.height - 130;
 
-    // Fake live-stream values modulated by animT so it feels alive.
+    // Real measurements from the live geometry pass. Idle fallback only
+    // shows during the brief window before the first frame's geometry
+    // lands; once we have data, every value below is the user's actual
+    // face metric, recomputed every frame.
+    final g = geometry;
+    final canthal = g?.canthalTilt    ?? (3.0 + math.sin(animT * 2) * 0.15);
+    final sym     = g?.symmetryScore  ?? (87 + math.sin(animT * 1.5) * 1.2);
+    final fwhr    = g?.fwhr           ?? (1.87 + math.sin(animT * 1.8) * 0.02);
+    final jaw     = g?.jawAngle       ?? (118 + math.sin(animT * 1.3) * 0.8);
+    final chin    = g?.chinProjection ?? (0.34 + math.sin(animT * 1.6) * 0.01);
+    // Facial thirds — round to nearest integer for the marquee compactness.
+    final t1 = (g?.facialThirdTop ?? 33).round();
+    final t2 = (g?.facialThirdMid ?? 33).round();
+    final t3 = (g?.facialThirdLow ?? 34).round();
     final values = <String>[
-      'CANTHAL ${(3.0 + math.sin(animT * 2) * 0.15).toStringAsFixed(2)}°',
-      'SYM ${(87 + math.sin(animT * 1.5) * 1.2).toStringAsFixed(1)}%',
-      'FWHR ${(1.87 + math.sin(animT * 1.8) * 0.02).toStringAsFixed(2)}',
-      'JAW ${(118 + math.sin(animT * 1.3) * 0.8).toStringAsFixed(0)}°',
-      'CHIN +${(3.4 + math.sin(animT * 1.6) * 0.1).toStringAsFixed(1)}mm',
-      'THIRDS 33/33/34',
+      'CANTHAL ${canthal.toStringAsFixed(2)}°',
+      'SYM ${sym.toStringAsFixed(1)}%',
+      'FWHR ${fwhr.toStringAsFixed(2)}',
+      'JAW ${jaw.toStringAsFixed(0)}°',
+      'CHIN ${chin.toStringAsFixed(2)}',
+      'THIRDS $t1/$t2/$t3',
     ];
     final text = values.join('   ·   ');
 
@@ -2026,7 +2049,8 @@ class GeometryOverlayPainter extends CustomPainter {
       old.lockProgress != lockProgress ||
       old.statusText   != statusText   ||
       old.statusColor  != statusColor  ||
-      old.holdProgress != holdProgress;
+      old.holdProgress != holdProgress ||
+      old.geometry     != geometry;
 }
 
 // ── Static MediaPipe face mesh edge subset (~80 edges covering face oval,

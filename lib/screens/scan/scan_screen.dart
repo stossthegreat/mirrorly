@@ -1015,11 +1015,12 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
                   // Front-cam preview behaves opposite on Android (no auto
                   // mirror) — flag the painter to swap LEFT/RIGHT cues.
                   mirrorLR:     Platform.isAndroid,
-                  // True only when MediaPipe gave us a real 468-point mesh
-                  // (Android). Gates topology-dependent layers — bone
-                  // structure, measurement arcs — that need indices the
-                  // iOS semantic mesh can't synthesise from contours.
                   denseMesh:    _denseMesh,
+                  // Real per-frame geometry — the painter feeds these
+                  // directly into the live HUD readouts so the user
+                  // sees their ACTUAL canthal tilt, jaw angle, FWHR,
+                  // symmetry instead of a hardcoded sine-wave wiggle.
+                  geometry:     _geometry,
                 ),
               ),
             ),
