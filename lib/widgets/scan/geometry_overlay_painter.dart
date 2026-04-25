@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../models/face_geometry.dart';
 import '../../services/face_mesh_service.dart';
 
 /// Multi-angle Face-ID-style scan. Front, then left 3/4, then right 3/4 —
@@ -51,6 +52,19 @@ class GeometryOverlayPainter extends CustomPainter {
   // direction. Caller passes `Platform.isAndroid` here.
   final bool mirrorLR;
 
+  // Informational — true when the upstream produced a real 468-point
+  // MediaPipe mesh (Android). iOS produces a synthesised semantic mesh
+  // from contours instead. No layer currently gates on this — left as
+  // a hint for future features that genuinely need real topology.
+  final bool denseMesh;
+
+  // Real measured geometry from FaceGeometryService.computeGeometry,
+  // recomputed each frame in scan_screen. The painter uses these
+  // values for the live HUD readouts (rails, floating measurements,
+  // bottom marquee) so what the user sees is what the report will
+  // analyse — not a sine-wave decoration.
+  final FaceGeometry? geometry;
+
   const GeometryOverlayPainter({
     required this.mesh,
     required this.phase,
@@ -62,6 +76,8 @@ class GeometryOverlayPainter extends CustomPainter {
     this.statusColor = 'idle',
     this.holdProgress = 0,
     this.mirrorLR = false,
+    this.denseMesh = false,
+    this.geometry,
   });
 
   // ── Palette ───────────────────────────────────────────────────────────────
@@ -495,6 +511,9 @@ class GeometryOverlayPainter extends CustomPainter {
 
     for (var i = 0; i < points.length; i++) {
       final p = points[i];
+      // Skip the iOS semantic-mesh sentinel so unpopulated canonical
+      // MediaPipe slots don't paint stray dots off the canvas edge.
+      if (p.dx < 0 || p.dx > 1 || p.dy < 0 || p.dy > 1) continue;
       final x = p.dx * size.width;
       final y = p.dy * size.height;
 
@@ -609,16 +628,22 @@ class GeometryOverlayPainter extends CustomPainter {
     bool dramatic   = false,
   }) {
     final points = mesh!.points;
-    if (points.length < 200) return;
+    if (points.isEmpty) return;
 
     final reveal = phase == ScanPhase.measuring
         ? ((progress - 0.05) / 0.8).clamp(0.0, 1.0)
         : 1.0;
     if (reveal <= 0) return;
 
+    // px() filters sentinel placeholders (out-of-canvas coords used by
+    // the iOS semantic mesh for unmapped indices) so chains drawn from
+    // MediaPipe topology don't include invisible far-off points.
+    // chain() iterates whatever survives, so iOS chains end up shorter
+    // but still draw the segments where data exists.
     Offset? px(int i) {
       if (i >= points.length) return null;
       final p = points[i];
+      if (p.dx < 0 || p.dx > 1 || p.dy < 0 || p.dy > 1) return null;
       return Offset(p.dx * size.width, p.dy * size.height);
     }
 
@@ -804,21 +829,32 @@ class GeometryOverlayPainter extends CustomPainter {
   // ═══════════════════════════════════════════════════════════════════════════
   void _drawLiveMeasurementLines(Canvas canvas, Size size) {
     final points = mesh!.points;
-    if (points.length < 200) return;
+    // Anchor-driven (33, 234, 454, 1, 152) — works on iOS too via the
+    // semantic mesh. Just need enough points for the canonical indices
+    // to be addressable, which the semantic builder guarantees (length
+    // 500). We still bail on a totally empty mesh.
+    if (points.isEmpty) return;
 
     Offset? px(int i) {
       if (i >= points.length) return null;
       final p = points[i];
+      // Off-canvas sentinel — semantic mesh fills unmapped indices with
+      // (-10, -10). Treat anything outside [0,1] as "no data here" so
+      // we don't try to anchor a rail to thin air.
+      if (p.dx < 0 || p.dx > 1 || p.dy < 0 || p.dy > 1) return null;
       return Offset(p.dx * size.width, p.dy * size.height);
     }
 
-    // Fake-live values modulated by animT — visually sell the precision.
-    // Real values come from backend /analyse.
-    final canthal = (3.0 + math.sin(animT * 2.1) * 0.12);
-    final jaw     = (118 + math.sin(animT * 1.6) * 0.6);
-    final fwhr    = (1.87 + math.sin(animT * 1.9) * 0.015);
-    final sym     = (87 + math.sin(animT * 1.3) * 0.8);
-    final nose    = (0.34 + math.sin(animT * 1.5) * 0.008);
+    // Real measurements from this frame's FaceGeometryService pass.
+    // Geometry can be null briefly between the first frame's mesh
+    // arriving and the geometry being computed — fall back to a
+    // small idle wobble so the rails don't blink to zero.
+    final g = geometry;
+    final canthal = g?.canthalTilt        ?? (math.sin(animT * 2.1) * 0.12);
+    final jaw     = g?.jawAngle           ?? (118 + math.sin(animT * 1.6) * 0.6);
+    final fwhr    = g?.fwhr               ?? (1.87 + math.sin(animT * 1.9) * 0.015);
+    final sym     = g?.symmetryScore      ?? (87 + math.sin(animT * 1.3) * 0.8);
+    final nose    = g?.noseLengthRatio    ?? (0.34 + math.sin(animT * 1.5) * 0.008);
 
     // 5 rails — each: (anchor index, left-side boolean, label text, delay)
     final rails = <({int anchor, bool leftSide, String label, double delayFrac})>[
@@ -944,9 +980,12 @@ class GeometryOverlayPainter extends CustomPainter {
   // ═══════════════════════════════════════════════════════════════════════════
   void _drawFaceSilhouetteGlow(Canvas canvas, Size size) {
     final points = mesh!.points;
-    if (points.length < 200) return;
+    if (points.isEmpty) return;
 
     // Face-oval indices (MediaPipe 468 mesh face boundary, clockwise).
+    // The semantic-mesh builder on iOS distributes ML Kit's face oval
+    // contour points across these same canonical indices, so the glow
+    // traces the same outline on both platforms.
     const faceOvalIdx = [
       10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
       397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
@@ -961,6 +1000,8 @@ class GeometryOverlayPainter extends CustomPainter {
     final pts = faceOvalIdx.map((i) {
       if (i >= points.length) return null;
       final p = points[i];
+      // Skip sentinel / unmapped entries.
+      if (p.dx < 0 || p.dx > 1 || p.dy < 0 || p.dy > 1) return null;
       return Offset(p.dx * size.width, p.dy * size.height);
     }).whereType<Offset>().toList();
     if (pts.length < 8) return;
@@ -1010,7 +1051,7 @@ class GeometryOverlayPainter extends CustomPainter {
   // ═══════════════════════════════════════════════════════════════════════════
   void _drawConstellation(Canvas canvas, Size size) {
     final points = mesh!.points;
-    if (points.length < 200) return;
+    if (points.isEmpty) return;
 
     final reveal = ((progress - 0.25) / 0.6).clamp(0.0, 1.0);
     if (reveal <= 0) return;
@@ -1024,6 +1065,9 @@ class GeometryOverlayPainter extends CustomPainter {
     for (final i in anchors) {
       if (i >= points.length) continue;
       final p = points[i];
+      // Skip unmapped / sentinel anchors so iOS doesn't draw stars
+      // bunched off-canvas or in random positions.
+      if (p.dx < 0 || p.dx > 1 || p.dy < 0 || p.dy > 1) continue;
       final x = p.dx * size.width;
       final y = p.dy * size.height;
 
@@ -1063,7 +1107,7 @@ class GeometryOverlayPainter extends CustomPainter {
   // ═══════════════════════════════════════════════════════════════════════════
   void _drawMeasurementArcs(Canvas canvas, Size size) {
     final points = mesh!.points;
-    if (points.length < 200) return;
+    if (points.isEmpty) return;
 
     final reveal = ((progress - 0.40) / 0.50).clamp(0.0, 1.0);
     if (reveal <= 0) return;
@@ -1071,6 +1115,9 @@ class GeometryOverlayPainter extends CustomPainter {
     Offset? px(int i) {
       if (i >= points.length) return null;
       final p = points[i];
+      // Filter the iOS semantic-mesh sentinel so arcs aren't anchored
+      // to off-canvas points when an index is unpopulated.
+      if (p.dx < 0 || p.dx > 1 || p.dy < 0 || p.dy > 1) return null;
       return Offset(p.dx * size.width, p.dy * size.height);
     }
 
@@ -1187,8 +1234,10 @@ class GeometryOverlayPainter extends CustomPainter {
   //  the biometric-grade moment that sells the precision.
   // ═══════════════════════════════════════════════════════════════════════════
   void _drawFeatureBeam(Canvas canvas, Size size) {
+    // Pure horizontal sweep — no point indexing required. Just needs to
+    // know a face was detected (any non-empty mesh).
     final points = mesh!.points;
-    if (points.length < 200) return;
+    if (points.isEmpty) return;
 
     // 6 feature zones, each gets its own progress slice.
     const zones = [
@@ -1429,22 +1478,29 @@ class GeometryOverlayPainter extends CustomPainter {
   // ═══════════════════════════════════════════════════════════════════════════
   void _drawFloatingMeasurements(Canvas canvas, Size size) {
     final points = mesh!.points;
-    if (points.length < 200) return;
+    // Anchor-only — uses idxLeftEyeOuter, idxChin, idxCheekL, idxCheekR
+    // which the iOS semantic mesh populates correctly.
+    if (points.isEmpty) return;
     final reveal = ((progress - 0.55) / 0.35).clamp(0.0, 1.0);
     if (reveal <= 0) return;
 
     Offset? px(int i) {
       if (i >= points.length) return null;
       final p = points[i];
+      // Sentinel guard so an unmapped anchor doesn't paint a readout
+      // off-screen at (-X, -Y).
+      if (p.dx < 0 || p.dx > 1 || p.dy < 0 || p.dy > 1) return null;
       return Offset(p.dx * size.width, p.dy * size.height);
     }
 
-    // Fake-live values modulated so they feel alive. These visually SELL
-    // the precision — the verdict/real data in the report comes from backend.
-    final canthal = (3.0 + math.sin(animT * 2.1) * 0.12);
-    final jaw     = (118 + math.sin(animT * 1.6) * 0.6);
-    final fwhr    = (1.87 + math.sin(animT * 1.9) * 0.015);
-    final sym     = (87  + math.sin(animT * 1.3) * 0.8);
+    // Real measurements from FaceGeometryService.computeGeometry, fed
+    // in by scan_screen each frame. Idle fallback only fires before
+    // the first geometry pass lands.
+    final g = geometry;
+    final canthal = g?.canthalTilt   ?? (math.sin(animT * 2.1) * 0.12);
+    final jaw     = g?.jawAngle      ?? (118 + math.sin(animT * 1.6) * 0.6);
+    final fwhr    = g?.fwhr          ?? (1.87 + math.sin(animT * 1.9) * 0.015);
+    final sym     = g?.symmetryScore ?? (87 + math.sin(animT * 1.3) * 0.8);
 
     final readouts = <(Offset?, String, double)>[
       (px(FaceMesh.idxLeftEyeOuter),  'CANTHAL ${canthal.toStringAsFixed(2)}°', 0.00),
@@ -1786,14 +1842,27 @@ class GeometryOverlayPainter extends CustomPainter {
     // Near the bottom edge, above the phase HUD.
     final y = size.height - 130;
 
-    // Fake live-stream values modulated by animT so it feels alive.
+    // Real measurements from the live geometry pass. Idle fallback only
+    // shows during the brief window before the first frame's geometry
+    // lands; once we have data, every value below is the user's actual
+    // face metric, recomputed every frame.
+    final g = geometry;
+    final canthal = g?.canthalTilt    ?? (3.0 + math.sin(animT * 2) * 0.15);
+    final sym     = g?.symmetryScore  ?? (87 + math.sin(animT * 1.5) * 1.2);
+    final fwhr    = g?.fwhr           ?? (1.87 + math.sin(animT * 1.8) * 0.02);
+    final jaw     = g?.jawAngle       ?? (118 + math.sin(animT * 1.3) * 0.8);
+    final chin    = g?.chinProjection ?? (0.34 + math.sin(animT * 1.6) * 0.01);
+    // Facial thirds — round to nearest integer for the marquee compactness.
+    final t1 = (g?.facialThirdTop ?? 33).round();
+    final t2 = (g?.facialThirdMid ?? 33).round();
+    final t3 = (g?.facialThirdLow ?? 34).round();
     final values = <String>[
-      'CANTHAL ${(3.0 + math.sin(animT * 2) * 0.15).toStringAsFixed(2)}°',
-      'SYM ${(87 + math.sin(animT * 1.5) * 1.2).toStringAsFixed(1)}%',
-      'FWHR ${(1.87 + math.sin(animT * 1.8) * 0.02).toStringAsFixed(2)}',
-      'JAW ${(118 + math.sin(animT * 1.3) * 0.8).toStringAsFixed(0)}°',
-      'CHIN +${(3.4 + math.sin(animT * 1.6) * 0.1).toStringAsFixed(1)}mm',
-      'THIRDS 33/33/34',
+      'CANTHAL ${canthal.toStringAsFixed(2)}°',
+      'SYM ${sym.toStringAsFixed(1)}%',
+      'FWHR ${fwhr.toStringAsFixed(2)}',
+      'JAW ${jaw.toStringAsFixed(0)}°',
+      'CHIN ${chin.toStringAsFixed(2)}',
+      'THIRDS $t1/$t2/$t3',
     ];
     final text = values.join('   ·   ');
 
@@ -1980,7 +2049,8 @@ class GeometryOverlayPainter extends CustomPainter {
       old.lockProgress != lockProgress ||
       old.statusText   != statusText   ||
       old.statusColor  != statusColor  ||
-      old.holdProgress != holdProgress;
+      old.holdProgress != holdProgress ||
+      old.geometry     != geometry;
 }
 
 // ── Static MediaPipe face mesh edge subset (~80 edges covering face oval,

@@ -1,7 +1,7 @@
 name: mirror
 description: "Real facial geometry analysis. Not a rating. Measurements."
 publish_to: 'none'
-version: 1.0.1+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.8.0
@@ -15,6 +15,11 @@ dependencies:
   flutter_animate: ^4.5.2
   camera: 0.10.5+5
   google_mlkit_face_detection: ^0.13.0
+  # Android-only — Google explicitly states this plugin's iOS impl is
+  # "still in beta and only available for Android". On iOS we synthesise
+  # an equivalent dense overlay from face contours via _buildSemanticMesh
+  # in scan_screen.dart, populating canonical MediaPipe indices from ML
+  # Kit contour data. No third-party iOS face-mesh dependency.
   google_mlkit_face_mesh_detection: ^0.4.2
   provider: ^6.1.2
   http: ^1.2.0
