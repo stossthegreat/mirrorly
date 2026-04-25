@@ -100,14 +100,15 @@ class _PaywallScreenState extends State<PaywallScreen> {
   String _priceFor(_Tier t) {
     final pkg = _packageFor(t);
     if (pkg != null) return pkg.storeProduct.priceString;
-    if (kBypassPaywall) {
-      switch (t) {
-        case _Tier.monthly: return _placeholderMonthly;
-        case _Tier.annual:  return _placeholderAnnual;
-        case _Tier.credits: return _placeholderCredits;
-      }
+    // Graceful fallback while the RevenueCat Offering isn't published
+    // yet (Play Store products in "Developer Action Needed" state, or
+    // App Store subscriptions not in "Ready to Submit"). Real prices
+    // replace these the moment the SDK delivers a Package.
+    switch (t) {
+      case _Tier.monthly: return _placeholderMonthly;
+      case _Tier.annual:  return _placeholderAnnual;
+      case _Tier.credits: return _placeholderCredits;
     }
-    return '—';
   }
 
   /// Monthly equivalent for the annual plan — computed from the real
@@ -120,9 +121,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
       final perMonth = p.price / 12.0;
       return _formatPrice(perMonth, p.currencyCode, p.priceString);
     }
-    // Placeholder: $49.99 / 12 ≈ $4.17
-    if (kBypassPaywall) return r'$4.17';
-    return '—';
+    // Placeholder: $49.99 / 12 ≈ $4.17 — replaced by real per-month
+    // value once the Annual Package loads from RevenueCat.
+    return r'$4.17';
   }
 
   /// Format with the same currency symbol the store used — we steal
@@ -256,15 +257,14 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // CTA is buyable when RC delivered a real Package, OR we're in
-    // dev/stub modes where _buy() routes through the notConfigured
-    // fallback and just sets the local subscribed flag. Without the
-    // kBypassPaywall arm, every TestFlight build before the
-    // RevenueCat Offering is published would see a permanently grey
-    // CTA — not what we want during smoke-testing.
-    final canBuy = _packageFor(_selected) != null
-        || !PurchaseConfig.isConfigured
-        || kBypassPaywall;
+    // CTA is always tappable. If RC delivered a real Package the buy
+    // path runs the live store sheet; otherwise PurchaseService.purchase
+    // returns notConfigured and the paywall falls back to setting the
+    // local subscribed flag (forwards to /report with the scan payload).
+    // This guarantees the CTA never sits permanently grey on a build
+    // where the RevenueCat Offering hasn't been published yet — same
+    // pattern users expect from the bypass mode while iterating.
+    final canBuy = true;
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
