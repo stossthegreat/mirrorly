@@ -12,3 +12,8 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Whitelist the upload keystore the flutter-aab-final workflow expects
+# in the repo at app/upload-keystore.jks. See app/SIGNING.md for the
+# expected fingerprints and security trade-off.
+!app/upload-keystore.jks

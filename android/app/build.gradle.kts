@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.mirrorly.app"
+    namespace = "com.mirrorly.mirrorly"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -25,7 +25,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.mirrorly.app"
+        applicationId = "com.mirrorly.mirrorly"
         // ML Kit Face Mesh requires Android 6.0+ (API 23). Below that the
         // detector loads but silently returns empty meshes — which was our
         // exact Android silent-failure bug.
@@ -44,11 +44,36 @@ android {
         }
     }
 
+    // Upload-key signing config consumed by the `flutter-aab-final`
+    // workflow. Creds read from env first (how the GitHub Actions job
+    // sets them in the "Verify keystore" step), falling back to the
+    // literal workflow defaults so a local `flutter build appbundle
+    // --release` works for anyone who already has the .jks dropped in.
+    //
+    // The keystore file itself lives at android/app/upload-keystore.jks.
+    // SHA-1 fingerprint (registered with Play Console):
+    //   C2:27:D7:BE:A2:38:70:40:16:6A:E3:D9:BD:23:39:8D:60:DC:08:DE
+    // SHA-256:
+    //   76:E1:49:7A:35:36:DD:9A:02:8C:DB:46:5F:F8:D2:38:18:C0:FC:40:A2:55:53:C5:C7:AB:CF:2B:A7:5C:BD:ED
+    signingConfigs {
+        create("upload") {
+            storeFile = file("upload-keystore.jks")
+            storePassword = System.getenv("STORE_PASSWORD") ?: "skeletalpt123"
+            keyAlias      = System.getenv("KEY_ALIAS")      ?: "skeletalpt"
+            keyPassword   = System.getenv("KEY_PASSWORD")   ?: "skeletalpt123"
+        }
+    }
+
     buildTypes {
         release {
-            // Signing with debug keys so `flutter run --release` works. Swap
-            // to real keys before shipping.
-            signingConfig = signingConfigs.getByName("debug")
+            // Use the upload keystore for release so AAB is signed with the
+            // key registered in Play Console. Falls back to debug signing if
+            // the keystore file is missing (e.g. local dev with no .jks) so
+            // `flutter run --release` still works.
+            signingConfig = if (file("upload-keystore.jks").exists())
+                signingConfigs.getByName("upload")
+            else
+                signingConfigs.getByName("debug")
 
             // ML Kit classes are reached via reflection inside the detector
             // SDK. Without keep rules, R8 silently strips them and the
