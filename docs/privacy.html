@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mirrorly — Privacy Policy</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #0A0A0B; color: #ECECEE;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+  header { margin-bottom: 36px; }
+  .eyebrow {
+    color: #888; font-size: 11px; letter-spacing: 2.4px;
+    font-weight: 700; margin-bottom: 6px; text-transform: uppercase;
+  }
+  h1 {
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 700; font-size: 36px; margin: 0 0 4px;
+    letter-spacing: -0.5px;
+  }
+  h2 {
+    color: #E8222A;
+    font-size: 11px; letter-spacing: 2.6px; font-weight: 800;
+    text-transform: uppercase; margin: 32px 0 8px;
+  }
+  p { font-size: 15px; margin: 0 0 14px; color: #DADADC; }
+  ul { font-size: 15px; color: #DADADC; padding-left: 20px; margin: 0 0 14px; }
+  li { margin-bottom: 6px; }
+  a { color: #FFE6B0; }
+  .updated {
+    margin-top: 40px; color: #888;
+    font-size: 11px; letter-spacing: 1.4px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Mirrorly · What we collect, where it goes</div>
+    <h1>Privacy Policy</h1>
+  </header>
+
+  <h2>The short version</h2>
+  <p>Your photos are processed on your device. We send your photo to OpenAI and Replicate to generate your analysis and renders, then we forget it. We do not sell your data. We do not train AI on your face. We do not require an account.</p>
+
+  <h2>What we collect</h2>
+  <p>On your device: photos you take with the scan camera, the facial-geometry numbers derived from them (canthal tilt, jaw angle, FWHR, symmetry score, facial thirds, etc.), your score, your active protocol, and your purchase receipts. Nothing leaves your device unless you tap a button that clearly says it will send an image to our servers (e.g. "GENERATE IMAGE", "SCAN").</p>
+  <p>On our servers, temporarily: the single photo you submit to /scan, /rate, /tryon, or /maximize for the duration of that one request (seconds), plus the measurements and the generated image URL. We do not attach your photo to a persistent account, because there is no account.</p>
+
+  <h2>Face data — what it is, what it isn't</h2>
+  <p>Mirrorly uses on-device computer vision to derive geometric measurements from your selfie (Apple ML Kit on iOS, Google ML Kit on Android — both run entirely on the phone). These measurements are plain numbers: a canthal-tilt degree, a jaw angle, a symmetry score. They are NOT a biometric template that could be used to recognise you, match you to another photo, or unlock anything.</p>
+  <p><strong>What Mirrorly DOES with face data:</strong></p>
+  <ul>
+    <li>Compute and display your geometry score on-device.</li>
+    <li>Send the photo to OpenAI (GPT-4o Vision) and Replicate (Google Nano Banana, cdingram/face-swap) for the duration of one API call to generate your analysis prose and your "maximized twin" rendered image.</li>
+    <li>Store the photo + the geometry numbers locally on your device, in the app sandbox, until you delete the app.</li>
+  </ul>
+  <p><strong>What Mirrorly DOES NOT do with face data:</strong></p>
+  <ul>
+    <li>No facial recognition. We never match your face to any identity, account, or external database.</li>
+    <li>No biometric template. The geometry numbers are not a fingerprint of your face — they describe shape, not identity.</li>
+    <li>No long-term server storage. Photos sent to OpenAI / Replicate are processed for one request and discarded by their default API terms; we do not retain a copy on a Mirrorly server.</li>
+    <li>No model training. Neither Mirrorly nor any third party we send your photo to trains AI models on it (per our use of OpenAI and Replicate's default API endpoints, which exclude API inputs from training).</li>
+    <li>No sharing with data brokers, advertisers, or analytics partners.</li>
+  </ul>
+
+  <h2>Who processes your photos</h2>
+  <p>OpenAI — GPT-4o Vision runs your analysis and honest rating. Replicate — Google Nano Banana renders your transformation images; cdingram/face-swap locks the identity. Both providers process the photo for the duration of one API request and do not, by their terms, retain or train on the data we send them through the API.</p>
+
+  <h2>What we do not collect</h2>
+  <p>No name. No email. No phone number. No location. No social contacts. No tracking across other apps. No advertising identifier for profiling purposes.</p>
+
+  <h2>Children</h2>
+  <p>Mirrorly is not intended for children under 13. We do not knowingly collect data from children under 13. If you believe a child has used the app, email <a href="mailto:hello@mirrorly.app">hello@mirrorly.app</a> and we will delete any on-device and server-side records associated with the submission.</p>
+
+  <h2>Your rights</h2>
+  <p>Access: all your data is on your device; open it in Settings → App Privacy → See all app data.</p>
+  <p>Deletion: delete the app to erase on-device data; the transient server-side request data is auto-expired.</p>
+  <p>Opt-out of auto-renewal: App Store or Google Play account settings.</p>
+
+  <h2>Purchases</h2>
+  <p>Billing is handled by Apple (App Store) or Google (Play Billing). Mirrorly never sees your card number. We see only a receipt that confirms whether your subscription is active.</p>
+
+  <h2>Security</h2>
+  <p>Photos in transit are sent over HTTPS. On your device, photos are stored in the app's sandboxed documents directory and are deleted when the app is uninstalled.</p>
+
+  <h2>Changes</h2>
+  <p>We may update this policy. Material changes will be surfaced inside the app before they take effect.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or data requests? Email <a href="mailto:hello@mirrorly.app">hello@mirrorly.app</a>.</p>
+
+  <div class="updated">Last updated 25 April 2026.</div>
+</main>
+</body>
+</html>
