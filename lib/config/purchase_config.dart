@@ -41,11 +41,11 @@ class PurchaseConfig {
   /// Gobly pattern (`<app>_pro_<cadence>`):
   ///   mirrorly_pro_monthly   →  Monthly subscription
   ///   mirrorly_pro_annual    →  Annual subscription
-  ///   mirrorly_pro_rescue    →  20-credit one-time pack
+  ///   mirrorly_pro_rescue1    →  20-credit one-time pack
   static const productIds = (
     monthly: 'mirrorly_pro_monthly',
     yearly:  'mirrorly_pro_annual',
-    credits: 'mirrorly_pro_rescue',
+    credits: 'mirrorly_pro_rescue1',
   );
 
   /// RevenueCat package identifiers inside the Default Offering.
