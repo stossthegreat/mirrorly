@@ -152,14 +152,13 @@ class PurchaseService {
 
       Package? monthly;
       Package? annual;
-      Package? credits;
 
-      // Match by package identifier first (the canonical RC slots
-      // $rc_monthly / $rc_annual + our custom credits_20). If the
-      // dashboard used different package IDs (e.g. someone picked
-      // "Custom" type and typed `monthly` instead of `$rc_monthly`),
-      // fall back to matching by the underlying store-product id.
-      // Either way the app finds them.
+      // Match by package identifier first (canonical RC slots
+      // $rc_monthly / $rc_annual). If the dashboard used different
+      // package IDs (e.g. someone picked "Custom" type and typed
+      // `monthly` instead of `$rc_monthly`), fall back to matching
+      // by the underlying store-product id. Either way the app
+      // finds them.
       for (final pkg in current.availablePackages) {
         final pkgId = pkg.identifier.toLowerCase();
         final prodId = pkg.storeProduct.identifier.toLowerCase();
@@ -175,26 +174,16 @@ class PurchaseService {
             || prodId.contains('annual')
             || prodId.contains('yearly');
 
-        final isCredits =
-               pkgId == PurchaseConfig.offering.creditsPackage.toLowerCase()
-            || pkgId.contains('credit')
-            || pkgId.contains('rescue')
-            || prodId.contains('rescue')
-            || prodId.contains('credit');
-
         if (isMonthly && monthly == null) {
           monthly = pkg;
         } else if (isAnnual && annual == null) {
           annual = pkg;
-        } else if (isCredits && credits == null) {
-          credits = pkg;
         }
       }
 
       _cached = PurchaseOfferings(
         monthly: monthly,
         annual:  annual,
-        credits: credits,
       );
       return _cached!;
     } catch (err) {
@@ -227,15 +216,8 @@ class PurchaseService {
     try {
       final result = await Purchases.purchasePackage(pkg);
       final isPro = result.entitlements.all[PurchaseConfig.proEntitlementId]?.isActive ?? false;
-      // Credit packs aren't a subscription entitlement — they're
-      // consumable. For those, treat any successful purchase as a
-      // credit grant. The subscription flag only flips for pro.
-      final isCreditPack =
-          pkg.identifier == PurchaseConfig.offering.creditsPackage;
       if (isPro) {
         await LocalStoreService.setSubscribed(true);
-      }
-      if (isPro || isCreditPack) {
         return PurchaseOutcome.success;
       }
       lastErrorMessage = 'Entitlement did not activate.';
@@ -330,21 +312,19 @@ class PurchaseService {
 
 enum PurchaseOutcome { success, cancelled, error, noPriorPurchases, notConfigured }
 
-/// Snapshot of the three products the paywall needs. Nulls are OK —
-/// means the package isn't in the current offering yet, paywall shows
-/// that slot as unavailable.
+/// Snapshot of the two subscription products the paywall needs.
+/// Nulls = package isn't in the current offering yet; the paywall
+/// shows a dash for that slot until RC delivers it.
 class PurchaseOfferings {
   final Package? monthly;
   final Package? annual;
-  final Package? credits;
 
   const PurchaseOfferings({
     required this.monthly,
     required this.annual,
-    required this.credits,
   });
 
   factory PurchaseOfferings.empty() => const PurchaseOfferings(
-    monthly: null, annual: null, credits: null,
+    monthly: null, annual: null,
   );
 }

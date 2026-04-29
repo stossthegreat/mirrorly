@@ -41,7 +41,7 @@ class PaywallScreen extends StatefulWidget {
   State<PaywallScreen> createState() => _PaywallScreenState();
 }
 
-enum _Tier { monthly, annual, credits }
+enum _Tier { monthly, annual }
 
 class _PaywallScreenState extends State<PaywallScreen> {
   _Tier _selected = _Tier.annual;
@@ -91,28 +91,18 @@ class _PaywallScreenState extends State<PaywallScreen> {
   //  hardcoded prices, even if the offering is misconfigured.
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Visual-only placeholder prices used while RevenueCat hasn't yet
-  /// returned a real Offering (Play / App Store products not yet
-  /// activated, or RC dashboard Offering not published). The moment a
-  /// real Package arrives, these are ignored — `_priceFor` always
-  /// prefers the live store price. Mirrors the Gobly pricing tier so
-  /// the paywall reads sensibly during pre-launch testing.
-  static const _placeholderMonthly = r'$4.99';
-  static const _placeholderAnnual  = r'$29.99';
-  static const _placeholderCredits = r'$9.99';
+  /// Visual-only placeholder used while RevenueCat hasn't returned a
+  /// real Offering. NEVER show invented hardcoded numbers — show a
+  /// dash so the user (and reviewers) immediately see "store not
+  /// loaded yet" instead of a fake price. Real RC-delivered prices
+  /// replace this dash the moment a Package arrives.
+  static const _placeholderDash = '—';
 
   String _priceFor(_Tier t) {
     final pkg = _packageFor(t);
     if (pkg != null) return pkg.storeProduct.priceString;
-    // Graceful fallback while the RevenueCat Offering isn't published
-    // yet (Play Store products in "Developer Action Needed" state, or
-    // App Store subscriptions not in "Ready to Submit"). Real prices
-    // replace these the moment the SDK delivers a Package.
-    switch (t) {
-      case _Tier.monthly: return _placeholderMonthly;
-      case _Tier.annual:  return _placeholderAnnual;
-      case _Tier.credits: return _placeholderCredits;
-    }
+    // No live Package yet → dash, never an invented number.
+    return _placeholderDash;
   }
 
   /// Monthly equivalent for the annual plan — computed from the real
@@ -125,9 +115,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
       final perMonth = p.price / 12.0;
       return _formatPrice(perMonth, p.currencyCode, p.priceString);
     }
-    // Placeholder: $29.99 / 12 ≈ $2.50 — replaced by real per-month
-    // value once the Annual Package loads from RevenueCat.
-    return r'$2.50';
+    // No Annual Package loaded → dash. Real per-month derived from
+    // the actual store price once RC delivers it.
+    return _placeholderDash;
   }
 
   /// Format with the same currency symbol the store used — we steal
@@ -143,7 +133,6 @@ class _PaywallScreenState extends State<PaywallScreen> {
   Package? _packageFor(_Tier t) => switch (t) {
     _Tier.monthly => _offerings.monthly,
     _Tier.annual  => _offerings.annual,
-    _Tier.credits => _offerings.credits,
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -386,19 +375,6 @@ class _PaywallScreenState extends State<PaywallScreen> {
                           setState(() => _selected = _Tier.annual);
                         },
                       )),
-                      const SizedBox(width: 8),
-                      Expanded(child: _PriceCard(
-                        title: '20 CREDITS',
-                        price: _priceFor(_Tier.credits),
-                        cadence: '20 renders',
-                        footnote: 'One-time',
-                        selected: _selected == _Tier.credits,
-                        available: true,
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          setState(() => _selected = _Tier.credits);
-                        },
-                      )),
                     ],
                   ).animate().fadeIn(delay: 600.ms, duration: 400.ms),
 
@@ -542,7 +518,6 @@ class _PaywallScreenState extends State<PaywallScreen> {
     switch (_selected) {
       case _Tier.monthly: return 'SUBSCRIBE · $price / MO';
       case _Tier.annual:  return 'SUBSCRIBE · $price / YR';
-      case _Tier.credits: return 'BUY · $price';
     }
   }
 
@@ -580,16 +555,6 @@ class _PaywallScreenState extends State<PaywallScreen> {
                'account settings. Uninstalling the app does NOT '
                'cancel the subscription.';
         break;
-      case _Tier.credits:
-        text = '20 Render Credits — one-time purchase of $price. NOT '
-               'a subscription. Your App Store (or Google Play) '
-               'account will be charged $price at confirmation of '
-               'purchase, once. No auto-renewal. Each credit entitles '
-               'you to one AI-rendered image. Credits do not expire '
-               'and are non-refundable and non-transferable. A '
-               'Mirrorly Pro subscription is required to perform '
-               'scans.';
-        break;
     }
 
     return Text(
@@ -603,26 +568,14 @@ class _PaywallScreenState extends State<PaywallScreen> {
   }
 
   List<String> _bulletsFor(_Tier t) {
-    switch (t) {
-      case _Tier.monthly:
-      case _Tier.annual:
-        return [
-          '2 scans per week',
-          '10 AI-rendered images per month',
-          'The Mirror — unlimited chat advice',
-          'Honest-looks score (GPT-4o Vision)',
-          'Geometry score (on-device, 16 metrics)',
-          'Cancel anytime in App Store or Google Play settings',
-        ];
-      case _Tier.credits:
-        return [
-          '20 AI-rendered images (one per credit)',
-          'No subscription, no recurring charge',
-          'Credits never expire',
-          'Non-refundable, non-transferable',
-          'Requires an active Mirrorly Pro subscription for scans',
-        ];
-    }
+    return const [
+      '2 scans per week',
+      '10 AI-rendered images per month',
+      'The Mirror — unlimited chat advice',
+      'Honest-looks score (GPT-4o Vision)',
+      'Geometry score (on-device, 16 metrics)',
+      'Cancel anytime in App Store or Google Play settings',
+    ];
   }
 }
 
