@@ -37,25 +37,26 @@ class PurchaseConfig {
   static const proEntitlementId = 'pro';
 
   /// Product identifiers — MUST match exactly what's in App Store
-  /// Connect and Google Play Console. Naming convention follows the
-  /// Gobly pattern (`<app>_pro_<cadence>`):
+  /// Connect and Google Play Console.
   ///   mirrorly_pro_monthly   →  Monthly subscription
   ///   mirrorly_pro_annual    →  Annual subscription
-  ///   mirrorly_pro_rescue1    →  20-credit one-time pack
+  ///
+  /// The 20-credit rescue pack is intentionally NOT here. Credits are
+  /// no longer sold through RevenueCat — that flow has moved out of
+  /// the paywall. Re-introduce a credits product here only if the
+  /// in-app credit pack ever returns to the RC integration path.
   static const productIds = (
     monthly: 'mirrorly_pro_monthly',
     yearly:  'mirrorly_pro_annual',
-    credits: 'mirrorly_pro_rescue1',
   );
 
   /// RevenueCat package identifiers inside the Default Offering.
-  /// Convention: RevenueCat has built-in slot names ($rc_monthly,
-  /// $rc_annual) for the two subscriptions — use those. The credit
-  /// pack is a custom identifier.
+  /// RevenueCat has built-in slot names ($rc_monthly, $rc_annual)
+  /// for the two subscriptions — those are what we attach products
+  /// to in the dashboard.
   static const offering = (
     monthlyPackage: '\$rc_monthly',
     annualPackage:  '\$rc_annual',
-    creditsPackage: 'credits_20',
   );
 
   /// Convenience — true once keys are filled in. Lets the app avoid

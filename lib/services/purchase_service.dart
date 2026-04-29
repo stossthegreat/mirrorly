@@ -35,6 +35,59 @@ class PurchaseService {
   /// every Android-side cause.
   static String? lastErrorMessage;
 
+  /// Diagnostic snapshot of the last RevenueCat fetch. Populated by
+  /// loadOfferings() and surfaced via diagnose() so the paywall can show
+  /// *exactly* what RC returned on this device — useful when "it works
+  /// on iOS but not Android" and the user can't read adb logcat.
+  static String? lastDiagnostic;
+
+  /// Walk RevenueCat end-to-end and produce a one-paragraph summary of
+  /// the SDK state on this device. Safe to call any time. The output
+  /// is intentionally short so it fits in a snackbar.
+  static Future<String> diagnose() async {
+    final lines = <String>[];
+    lines.add('Platform: ${Platform.isIOS ? "iOS" : "Android"}');
+    lines.add('Configured: ${PurchaseConfig.isConfigured}');
+    lines.add('Initialised: $_initialized');
+    if (!_initialized) {
+      lines.add('→ Init never ran. Check API key in purchase_config.dart.');
+      return lines.join('\n');
+    }
+    try {
+      final offerings = await Purchases.getOfferings();
+      final cur = offerings.current;
+      lines.add('Offerings.all keys: ${offerings.all.keys.toList()}');
+      if (cur == null) {
+        lines.add('→ No CURRENT offering. Publish a Default Offering in '
+                  'RevenueCat dashboard and mark it Current.');
+      } else {
+        lines.add('Current offering: "${cur.identifier}"');
+        lines.add('Packages: ${cur.availablePackages.length}');
+        for (final p in cur.availablePackages) {
+          lines.add('  · pkg "${p.identifier}" → '
+                    '${p.storeProduct.identifier} '
+                    '(${p.storeProduct.priceString})');
+        }
+        if (cur.availablePackages.isEmpty) {
+          lines.add('→ Offering exists but has 0 packages. Attach products '
+                    'in dashboard → Offerings → Default Offering.');
+        }
+      }
+    } catch (err) {
+      lines.add('getOfferings threw: $err');
+    }
+    try {
+      final info = await Purchases.getCustomerInfo();
+      lines.add('Active entitlements: '
+                '${info.entitlements.active.keys.toList()}');
+    } catch (err) {
+      lines.add('getCustomerInfo threw: $err');
+    }
+    final out = lines.join('\n');
+    lastDiagnostic = out;
+    return out;
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   //  INITIALISATION
   // ─────────────────────────────────────────────────────────────────────────
@@ -72,45 +125,71 @@ class PurchaseService {
   //  OFFERINGS (prices + packages)
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Fetch the current RevenueCat Offering. Returns a snapshot the
-  /// paywall can render without re-hitting the network. Cached for the
-  /// lifetime of the process.
+  /// Fetch the current RevenueCat Offering. By default re-hits RC every
+  /// call so dashboard changes (newly published Offering, package
+  /// added, product attached) show up the next time the paywall opens
+  /// without needing an app restart. Pass `useCache: true` only when
+  /// you've genuinely got a fresh load and want to skip the network.
   ///
-  /// When the SDK isn't configured or the fetch fails, returns the
-  /// shape expected by the paywall with nulls in the price slots so
-  /// the UI renders "—" (never a hardcoded price — we never ship a
-  /// price to the store).
-  static Future<PurchaseOfferings> loadOfferings() async {
-    if (_cached != null) return _cached!;
+  /// When the SDK isn't configured or the fetch fails, returns empty
+  /// nulls for every slot so the paywall falls back to placeholder
+  /// prices (real RC prices replace them whenever a real Offering
+  /// arrives).
+  static Future<PurchaseOfferings> loadOfferings({bool useCache = false}) async {
+    if (useCache && _cached != null) return _cached!;
     if (!_initialized) return PurchaseOfferings.empty();
 
     try {
       final offerings = await Purchases.getOfferings();
       final current = offerings.current;
-      if (current == null) return PurchaseOfferings.empty();
+      if (current == null) {
+        // Don't cache "no current offering" — let the next open retry.
+        // The user might be in the middle of publishing a new offering
+        // in the dashboard right now.
+        _cached = null;
+        return PurchaseOfferings.empty();
+      }
 
       Package? monthly;
       Package? annual;
-      Package? credits;
 
+      // Match by package identifier first (canonical RC slots
+      // $rc_monthly / $rc_annual). If the dashboard used different
+      // package IDs (e.g. someone picked "Custom" type and typed
+      // `monthly` instead of `$rc_monthly`), fall back to matching
+      // by the underlying store-product id. Either way the app
+      // finds them.
       for (final pkg in current.availablePackages) {
-        final id = pkg.identifier;
-        if (id == PurchaseConfig.offering.monthlyPackage || id == r'$rc_monthly') {
+        final pkgId = pkg.identifier.toLowerCase();
+        final prodId = pkg.storeProduct.identifier.toLowerCase();
+
+        final isMonthly =
+               pkgId == r'$rc_monthly'
+            || pkgId == 'monthly'
+            || prodId.contains('monthly');
+
+        final isAnnual =
+               pkgId == r'$rc_annual'
+            || pkgId == 'annual' || pkgId == 'yearly'
+            || prodId.contains('annual')
+            || prodId.contains('yearly');
+
+        if (isMonthly && monthly == null) {
           monthly = pkg;
-        } else if (id == PurchaseConfig.offering.annualPackage || id == r'$rc_annual') {
+        } else if (isAnnual && annual == null) {
           annual = pkg;
-        } else if (id == PurchaseConfig.offering.creditsPackage) {
-          credits = pkg;
         }
       }
 
       _cached = PurchaseOfferings(
         monthly: monthly,
         annual:  annual,
-        credits: credits,
       );
       return _cached!;
-    } catch (_) {
+    } catch (err) {
+      // ignore: avoid_print
+      print('[PurchaseService] loadOfferings failed: $err');
+      _cached = null;
       return PurchaseOfferings.empty();
     }
   }
@@ -137,15 +216,8 @@ class PurchaseService {
     try {
       final result = await Purchases.purchasePackage(pkg);
       final isPro = result.entitlements.all[PurchaseConfig.proEntitlementId]?.isActive ?? false;
-      // Credit packs aren't a subscription entitlement — they're
-      // consumable. For those, treat any successful purchase as a
-      // credit grant. The subscription flag only flips for pro.
-      final isCreditPack =
-          pkg.identifier == PurchaseConfig.offering.creditsPackage;
       if (isPro) {
         await LocalStoreService.setSubscribed(true);
-      }
-      if (isPro || isCreditPack) {
         return PurchaseOutcome.success;
       }
       lastErrorMessage = 'Entitlement did not activate.';
@@ -240,21 +312,19 @@ class PurchaseService {
 
 enum PurchaseOutcome { success, cancelled, error, noPriorPurchases, notConfigured }
 
-/// Snapshot of the three products the paywall needs. Nulls are OK —
-/// means the package isn't in the current offering yet, paywall shows
-/// that slot as unavailable.
+/// Snapshot of the two subscription products the paywall needs.
+/// Nulls = package isn't in the current offering yet; the paywall
+/// shows a dash for that slot until RC delivers it.
 class PurchaseOfferings {
   final Package? monthly;
   final Package? annual;
-  final Package? credits;
 
   const PurchaseOfferings({
     required this.monthly,
     required this.annual,
-    required this.credits,
   });
 
   factory PurchaseOfferings.empty() => const PurchaseOfferings(
-    monthly: null, annual: null, credits: null,
+    monthly: null, annual: null,
   );
 }
