@@ -39,24 +39,28 @@ class PurchaseConfig {
   /// Product identifiers — MUST match exactly what's in App Store
   /// Connect and Google Play Console.
   ///   mirrorly_pro_monthly   →  Monthly subscription
-  ///   mirrorly_pro_annual    →  Annual subscription
-  ///
-  /// The 20-credit rescue pack is intentionally NOT here. Credits are
-  /// no longer sold through RevenueCat — that flow has moved out of
-  /// the paywall. Re-introduce a credits product here only if the
-  /// in-app credit pack ever returns to the RC integration path.
+  ///   mirrorly_pro_yearly    →  Annual subscription (Play Console
+  ///                             registered the yearly base plan as
+  ///                             `mirrorly_pro_yearly`, not `_annual`)
+  ///   mirrorly_pro_rescue    →  Rescue one-time IAP (Android only;
+  ///                             iOS rescue product is not yet
+  ///                             approved on App Store Connect)
   static const productIds = (
     monthly: 'mirrorly_pro_monthly',
-    yearly:  'mirrorly_pro_annual',
+    yearly:  'mirrorly_pro_yearly',
+    rescue:  'mirrorly_pro_rescue',
   );
 
-  /// RevenueCat package identifiers inside the Default Offering.
+  /// RevenueCat package identifiers inside the current Offering.
   /// RevenueCat has built-in slot names ($rc_monthly, $rc_annual)
   /// for the two subscriptions — those are what we attach products
-  /// to in the dashboard.
+  /// to in the dashboard. The rescue one-time IAP is a custom
+  /// package slot named `rescue` (see RC dashboard: the Play Store
+  /// row shows `mirrorly_pro_rescue:rescue`).
   static const offering = (
     monthlyPackage: '\$rc_monthly',
     annualPackage:  '\$rc_annual',
+    rescuePackage:  'rescue',
   );
 
   /// Convenience — true once keys are filled in. Lets the app avoid

@@ -141,40 +141,53 @@ class PurchaseService {
 
     try {
       final offerings = await Purchases.getOfferings();
-      final current = offerings.current;
+      // Prefer the dashboard-marked Current offering. If nothing is
+      // marked Current (common when the project has a single
+      // non-default offering like the Android-only "Month/Apk"
+      // offering visible in the RC dashboard), fall back to the
+      // first offering in `offerings.all` so the paywall still gets
+      // packages instead of leaving every price as "—".
+      final current = offerings.current
+          ?? (offerings.all.isNotEmpty ? offerings.all.values.first : null);
       if (current == null) {
-        // Don't cache "no current offering" — let the next open retry.
-        // The user might be in the middle of publishing a new offering
-        // in the dashboard right now.
+        // Don't cache "no offerings at all" — let the next open retry.
         _cached = null;
         return PurchaseOfferings.empty();
       }
 
       Package? monthly;
       Package? annual;
+      Package? rescue;
 
       // Match by package identifier first (canonical RC slots
-      // $rc_monthly / $rc_annual). If the dashboard used different
-      // package IDs (e.g. someone picked "Custom" type and typed
-      // `monthly` instead of `$rc_monthly`), fall back to matching
-      // by the underlying store-product id. Either way the app
-      // finds them.
+      // $rc_monthly / $rc_annual + the custom `rescue` slot for the
+      // one-time IAP). If the dashboard used different package IDs
+      // (e.g. someone picked "Custom" type and typed `monthly` instead
+      // of `$rc_monthly`), fall back to matching by the underlying
+      // store-product id. Either way the app finds them.
       for (final pkg in current.availablePackages) {
         final pkgId = pkg.identifier.toLowerCase();
         final prodId = pkg.storeProduct.identifier.toLowerCase();
 
-        final isMonthly =
+        final isRescue =
+               pkgId == PurchaseConfig.offering.rescuePackage.toLowerCase()
+            || pkgId.contains('rescue')
+            || prodId.contains('rescue');
+
+        final isMonthly = !isRescue && (
                pkgId == r'$rc_monthly'
             || pkgId == 'monthly'
-            || prodId.contains('monthly');
+            || prodId.contains('monthly'));
 
-        final isAnnual =
+        final isAnnual = !isRescue && (
                pkgId == r'$rc_annual'
             || pkgId == 'annual' || pkgId == 'yearly'
             || prodId.contains('annual')
-            || prodId.contains('yearly');
+            || prodId.contains('yearly'));
 
-        if (isMonthly && monthly == null) {
+        if (isRescue && rescue == null) {
+          rescue = pkg;
+        } else if (isMonthly && monthly == null) {
           monthly = pkg;
         } else if (isAnnual && annual == null) {
           annual = pkg;
@@ -184,6 +197,7 @@ class PurchaseService {
       _cached = PurchaseOfferings(
         monthly: monthly,
         annual:  annual,
+        rescue:  rescue,
       );
       return _cached!;
     } catch (err) {
@@ -216,8 +230,21 @@ class PurchaseService {
     try {
       final result = await Purchases.purchasePackage(pkg);
       final isPro = result.entitlements.all[PurchaseConfig.proEntitlementId]?.isActive ?? false;
+      // The rescue one-time IAP is a consumable in Play Console — it
+      // may grant credits (and in the user's RC config, also activates
+      // the `pro` entitlement) but treat any successful rescue
+      // purchase as a success even if the entitlement hasn't flipped
+      // yet, so the paywall doesn't surface a misleading
+      // "entitlement didn't activate" toast on a completed purchase.
+      final isRescue =
+             pkg.identifier.toLowerCase() ==
+                 PurchaseConfig.offering.rescuePackage.toLowerCase()
+          || pkg.identifier.toLowerCase().contains('rescue')
+          || pkg.storeProduct.identifier.toLowerCase().contains('rescue');
       if (isPro) {
         await LocalStoreService.setSubscribed(true);
+      }
+      if (isPro || isRescue) {
         return PurchaseOutcome.success;
       }
       lastErrorMessage = 'Entitlement did not activate.';
@@ -312,19 +339,22 @@ class PurchaseService {
 
 enum PurchaseOutcome { success, cancelled, error, noPriorPurchases, notConfigured }
 
-/// Snapshot of the two subscription products the paywall needs.
+/// Snapshot of the three products the paywall needs:
+///   monthly / annual subscriptions + the rescue one-time IAP.
 /// Nulls = package isn't in the current offering yet; the paywall
 /// shows a dash for that slot until RC delivers it.
 class PurchaseOfferings {
   final Package? monthly;
   final Package? annual;
+  final Package? rescue;
 
   const PurchaseOfferings({
     required this.monthly,
     required this.annual,
+    required this.rescue,
   });
 
   factory PurchaseOfferings.empty() => const PurchaseOfferings(
-    monthly: null, annual: null,
+    monthly: null, annual: null, rescue: null,
   );
 }

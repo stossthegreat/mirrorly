@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -41,7 +43,7 @@ class PaywallScreen extends StatefulWidget {
   State<PaywallScreen> createState() => _PaywallScreenState();
 }
 
-enum _Tier { monthly, annual }
+enum _Tier { monthly, annual, rescue }
 
 class _PaywallScreenState extends State<PaywallScreen> {
   _Tier _selected = _Tier.annual;
@@ -133,7 +135,14 @@ class _PaywallScreenState extends State<PaywallScreen> {
   Package? _packageFor(_Tier t) => switch (t) {
     _Tier.monthly => _offerings.monthly,
     _Tier.annual  => _offerings.annual,
+    _Tier.rescue  => _offerings.rescue,
   };
+
+  /// The rescue one-time IAP is only configured on the Play Store
+  /// (App Store Connect rescue product is "Not found" in RevenueCat
+  /// per the dashboard). Hide the rescue card on iOS so users don't
+  /// tap a permanently-empty third tile.
+  bool get _showRescueCard => Platform.isAndroid;
 
   // ─────────────────────────────────────────────────────────────────────────
   //  ACTIONS
@@ -346,7 +355,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
                   const SizedBox(height: 26),
 
-                  // 3. Three price cards — real localized prices
+                  // 3. Price cards — real localized prices. Three on
+                  //    Android (Monthly / Annual / Rescue one-time),
+                  //    two on iOS where the rescue product isn't yet
+                  //    approved in App Store Connect.
                   Row(
                     children: [
                       Expanded(child: _PriceCard(
@@ -375,6 +387,21 @@ class _PaywallScreenState extends State<PaywallScreen> {
                           setState(() => _selected = _Tier.annual);
                         },
                       )),
+                      if (_showRescueCard) ...[
+                        const SizedBox(width: 8),
+                        Expanded(child: _PriceCard(
+                          title: 'RESCUE',
+                          price: _priceFor(_Tier.rescue),
+                          cadence: '20 renders',
+                          footnote: 'One-time',
+                          selected: _selected == _Tier.rescue,
+                          available: true,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _selected = _Tier.rescue);
+                          },
+                        )),
+                      ],
                     ],
                   ).animate().fadeIn(delay: 600.ms, duration: 400.ms),
 
@@ -518,6 +545,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
     switch (_selected) {
       case _Tier.monthly: return 'SUBSCRIBE · $price / MO';
       case _Tier.annual:  return 'SUBSCRIBE · $price / YR';
+      case _Tier.rescue:  return 'BUY · $price';
     }
   }
 
@@ -555,6 +583,14 @@ class _PaywallScreenState extends State<PaywallScreen> {
                'account settings. Uninstalling the app does NOT '
                'cancel the subscription.';
         break;
+      case _Tier.rescue:
+        text = 'Mirrorly Rescue Pack — one-time purchase of $price. '
+               'NOT a subscription. Your Google Play account will be '
+               'charged $price at confirmation of purchase, once. No '
+               'auto-renewal. Each credit entitles you to one '
+               'AI-rendered "after" image. Credits do not expire and '
+               'are non-refundable and non-transferable.';
+        break;
     }
 
     return Text(
@@ -568,14 +604,26 @@ class _PaywallScreenState extends State<PaywallScreen> {
   }
 
   List<String> _bulletsFor(_Tier t) {
-    return const [
-      '2 scans per week',
-      '10 AI-rendered images per month',
-      'The Mirror — unlimited chat advice',
-      'Honest-looks score (GPT-4o Vision)',
-      'Geometry score (on-device, 16 metrics)',
-      'Cancel anytime in App Store or Google Play settings',
-    ];
+    switch (t) {
+      case _Tier.monthly:
+      case _Tier.annual:
+        return const [
+          '2 scans per week',
+          '10 AI-rendered images per month',
+          'The Mirror — unlimited chat advice',
+          'Honest-looks score (GPT-4o Vision)',
+          'Geometry score (on-device, 16 metrics)',
+          'Cancel anytime in App Store or Google Play settings',
+        ];
+      case _Tier.rescue:
+        return const [
+          '20 AI-rendered images (one per credit)',
+          'No subscription, no recurring charge',
+          'Credits never expire',
+          'Non-refundable, non-transferable',
+          'Requires an active Mirrorly Pro subscription for scans',
+        ];
+    }
   }
 }
 
