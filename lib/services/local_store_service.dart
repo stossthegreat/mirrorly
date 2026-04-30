@@ -13,6 +13,10 @@ class LocalStoreService {
   static const _kActiveProto  = 'protocol.active.v1';
   static const _kSubscribed   = 'subscription.active.v1';
   static const _kOnboarded    = 'onboarded.v1';
+  /// AI third-party data sharing consent (App Store guideline 5.1.2(i)).
+  /// User must explicitly tap ALLOW in [AiConsentDialog] before the
+  /// scan flow transmits the selfie photo to OpenAI / Replicate.
+  static const _kAiConsent    = 'ai.consent.v1';
 
   // ── Scans ────────────────────────────────────────────────────────────────
   static Future<List<ScanRecord>> loadScans() async {
@@ -106,6 +110,23 @@ class LocalStoreService {
   static Future<void> setOnboarded(bool v) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kOnboarded, v);
+  }
+
+  // ── AI third-party data sharing consent ─────────────────────────────────
+  /// True once the user has tapped ALLOW in the AI consent dialog
+  /// disclosing that the selfie photo is transmitted to OpenAI and
+  /// Replicate. Persisted across launches so we ask once, not every
+  /// scan. Required by App Store guideline 5.1.2(i): explicit
+  /// permission must be obtained before sharing personal data with
+  /// third-party AI services.
+  static Future<bool> hasAiConsent() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_kAiConsent) ?? false;
+  }
+
+  static Future<void> setAiConsent(bool v) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kAiConsent, v);
   }
 
   // ── Nuke ────────────────────────────────────────────────────────────────

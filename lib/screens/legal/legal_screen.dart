@@ -199,12 +199,28 @@ const termsDoc = LegalDoc(
       'surgical decision. Consult a licensed professional.'),
     LegalSection('YOUR CONTENT',
       'You retain all rights to photos you take inside Mirrorly. By '
-      'scanning a photo, you grant Mirrorly a limited, revocable, '
+      'scanning a photo and granting in-app permission in the AI data '
+      'consent dialog, you grant Mirrorly a limited, revocable, '
       'royalty-free licence to process that photo on your device and '
       'transmit it to our AI providers (OpenAI and Replicate) solely '
       'to produce your measurements, score, and rendered outputs. '
       'We do not sell your photos. We do not train AI models on '
       'your photos.'),
+    LegalSection('AI DATA PERMISSION — IN-APP CONSENT GATE',
+      'Before any selfie photo is transmitted to a third-party AI '
+      'service, the app shows a full-screen permission dialog '
+      'disclosing exactly what data is sent (the selfie photo + 16 '
+      'on-device geometric measurements), exactly who it is sent to '
+      '(OpenAI GPT-4o Vision for analysis; Replicate — Google Nano '
+      'Banana + cdingram/face-swap — for the rendered preview), and '
+      'how long they keep it (the duration of one API request, '
+      'excluded from training and long-term retention by the '
+      'providers\' default API terms). You must tap ALLOW for the '
+      'app to send the photo. Tapping CANCEL keeps the photo on '
+      'your device and aborts the analysis. You may revoke this '
+      'permission at any time from Settings → Revoke AI permission, '
+      'which clears the consent flag and re-shows the dialog on '
+      'your next scan.'),
     LegalSection('FACE DATA — WHAT WE COLLECT, WHY, WHO RECEIVES IT, HOW LONG WE KEEP IT',
       'WHAT FACE DATA MIRRORLY COLLECTS\n\n'
       'Mirrorly collects two related pieces of face data:\n'
@@ -286,10 +302,36 @@ const privacyDoc = LegalDoc(
   lastUpdatedLine: 'Last updated 25 April 2026.',
   sections: [
     LegalSection('THE SHORT VERSION',
-      'Your photos are processed on your device. We send your photo '
-      'to OpenAI and Replicate to generate your analysis and '
-      'renders, then we forget it. We do not sell your data. We do '
-      'not train AI on your face. We do not require an account.'),
+      'Your photos are processed on your device. Before we send your '
+      'photo to OpenAI and Replicate to generate your analysis and '
+      'renders, the app shows you an in-app permission dialog '
+      'explaining exactly what is sent and to whom — you must tap '
+      'ALLOW for the photo to leave your device. After processing, '
+      'we forget it. We do not sell your data. We do not train AI on '
+      'your face. We do not require an account. You can revoke AI '
+      'permission at any time in Settings.'),
+    LegalSection('AI DATA PERMISSION — HOW WE ASK',
+      'The first time you complete a scan, Mirrorly displays a '
+      'full-screen permission dialog disclosing:\n\n'
+      '• WHAT IS SENT: only the selfie photo you just captured plus '
+      'the sixteen on-device geometric measurements (canthal tilt, '
+      'jaw angle, symmetry, facial-thirds, etc.). No name, email, '
+      'contacts, or location.\n'
+      '• WHO RECEIVES IT: OpenAI (GPT-4o Vision) for the written '
+      'analysis and honest-looks rating; Replicate (Google Nano '
+      'Banana + cdingram/face-swap) for the rendered "maximised" '
+      'preview image.\n'
+      '• HOW LONG THEY KEEP IT: the duration of one API request '
+      'only — both providers\' default API terms exclude inputs '
+      'from training and long-term retention.\n'
+      '• HOW TO REVOKE: Settings → Revoke AI permission. After '
+      'that, no further scans will be transmitted until you grant '
+      'permission again.\n\n'
+      'You must tap ALLOW in this dialog before any photo bytes '
+      'leave the device. Tapping CANCEL aborts the analysis and '
+      'keeps the photo entirely on your device. The choice is '
+      'persisted across launches so we ask once, not every scan, '
+      'unless you revoke from Settings.'),
     LegalSection('WHAT WE COLLECT',
       'On your device: photos you take with the scan camera, the '
       'facial-geometry numbers derived from them (canthal tilt, jaw '

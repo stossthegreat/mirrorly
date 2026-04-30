@@ -159,6 +159,13 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () => _showPrivacySummary(context),
               ),
               _SettingTile(
+                icon: Icons.cloud_off_outlined,
+                title: 'Revoke AI permission',
+                subtitle: 'Stop sending photos to OpenAI / Replicate; '
+                          'asked again on the next scan',
+                onTap: () => _revokeAiConsent(context),
+              ),
+              _SettingTile(
                 icon: Icons.delete_outline,
                 title: 'Delete all data',
                 subtitle: 'Permanently removes scans from this device',
@@ -343,6 +350,21 @@ class SettingsScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _revokeAiConsent(BuildContext ctx) async {
+    HapticFeedback.selectionClick();
+    await LocalStoreService.setAiConsent(false);
+    if (!ctx.mounted) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: AppColors.surface2,
+      content: Text(
+        'AI permission revoked. We will ask again the next time '
+        'you scan.',
+        style: AppTypography.bodySmall.copyWith(
+          color: AppColors.textPrimary)),
+    ));
   }
 
   void _confirmDelete(BuildContext ctx) {

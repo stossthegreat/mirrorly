@@ -18,6 +18,7 @@ import '../../services/local_store_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../config/dev_flags.dart';
+import '../../widgets/common/ai_consent_dialog.dart';
 import '../../widgets/scan/geometry_overlay_painter.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -909,6 +910,30 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
         ? _capturedImages.sublist(1) : <Uint8List>[];
 
     if (!mounted) return;
+
+    // App Store guideline 5.1.2(i) gate. Before any selfie bytes
+    // leave the device for OpenAI / Replicate, the user must have
+    // granted explicit in-app permission. The /report screen is
+    // where MirrorApiService.analyseOnly fires the first network
+    // call, so we MUST get consent before we route there (and
+    // before /paywall, since a successful purchase forwards to
+    // /report with the scan payload). Apple's notes are explicit
+    // that putting the disclosure only in the privacy policy is
+    // not sufficient — this dialog is the in-app permission gate.
+    final hasConsent = await LocalStoreService.hasAiConsent();
+    if (!mounted) return;
+    if (!hasConsent) {
+      final granted = await AiConsentDialog.show(context);
+      if (!mounted) return;
+      if (!granted) {
+        // User declined. Reset the scan flow back to the searching
+        // phase so they can re-try (and either grant permission
+        // next time, or simply leave). Do NOT navigate forward —
+        // no photo bytes can be transmitted without consent.
+        setState(() => _phase = ScanPhase.searching);
+        return;
+      }
+    }
 
     // Paywall gate.
     //
