@@ -917,22 +917,18 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     // where MirrorApiService.analyseOnly fires the first network
     // call, so we MUST get consent before we route there (and
     // before /paywall, since a successful purchase forwards to
-    // /report with the scan payload). Apple's notes are explicit
-    // that putting the disclosure only in the privacy policy is
-    // not sufficient — this dialog is the in-app permission gate.
-    final hasConsent = await LocalStoreService.hasAiConsent();
+    // /report with the scan payload). ensure() short-circuits when
+    // the persisted flag is already set so a returning user only
+    // sees the dialog once.
+    final consented = await AiConsentDialog.ensure(context);
     if (!mounted) return;
-    if (!hasConsent) {
-      final granted = await AiConsentDialog.show(context);
-      if (!mounted) return;
-      if (!granted) {
-        // User declined. Reset the scan flow back to the searching
-        // phase so they can re-try (and either grant permission
-        // next time, or simply leave). Do NOT navigate forward —
-        // no photo bytes can be transmitted without consent.
-        setState(() => _phase = ScanPhase.searching);
-        return;
-      }
+    if (!consented) {
+      // User declined. Reset the scan flow back to the searching
+      // phase so they can re-try (and either grant permission
+      // next time, or simply leave). Do NOT navigate forward —
+      // no photo bytes can be transmitted without consent.
+      setState(() => _phase = ScanPhase.searching);
+      return;
     }
 
     // Paywall gate.

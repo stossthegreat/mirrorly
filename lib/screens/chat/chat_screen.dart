@@ -12,6 +12,7 @@ import '../../services/share_service.dart';
 import '../../services/trait_builder_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
+import '../../widgets/common/ai_consent_dialog.dart';
 import '../../widgets/common/before_after_card.dart';
 
 /// THE FACE DOCTOR.
@@ -116,6 +117,22 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = (prefilled ?? _input.text).trim();
     if (text.isEmpty || _sending) return;
     FocusScope.of(context).unfocus();
+
+    // App Store guideline 5.1.2(i) gate. The Mirror chat fires
+    // /chat which forwards the user's selfie photo to OpenAI. The
+    // user MUST have granted in-app consent before any photo
+    // bytes leave the device — even via the chat path. ensure()
+    // is a no-op once consent is persisted, so users who already
+    // accepted during scan don't see it again.
+    final consented = await AiConsentDialog.ensure(context);
+    if (!mounted) return;
+    if (!consented) {
+      // Decline — re-show the user's typed message intact so they
+      // can decide to clear it or grant permission and retry.
+      _input.text = text;
+      return;
+    }
+
     setState(() {
       _messages.add(ChatMessage(ChatRole.user, text));
       _sending = true;
@@ -148,6 +165,12 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _generateImage(ChatMessage msg) async {
     if (msg.rendering || msg.imageUrl != null) return;
     if (msg.styleRequest == null || widget.imagePath == null) return;
+
+    // 5.1.2(i) gate — try-on uploads the photo to Replicate via
+    // /tryon. Same consent contract as _send.
+    final consented = await AiConsentDialog.ensure(context);
+    if (!mounted) return;
+    if (!consented) return;
 
     setState(() => msg.rendering = true);
     HapticFeedback.mediumImpact();

@@ -41,6 +41,24 @@ class AiConsentDialog extends StatelessWidget {
     return false;
   }
 
+  /// Centralised "make sure consent exists before transmitting" helper.
+  /// Call this from EVERY entry point that fires an AI / backend call
+  /// carrying user data (scan, chat send, try-on, maximise, rate). It
+  /// short-circuits to true when the persisted flag is already set, so
+  /// the user only sees one dialog ever (until they revoke). When the
+  /// user is asked and declines, returns false and the caller MUST
+  /// abort the operation without sending any bytes.
+  ///
+  /// Apple guideline 5.1.2(i) requires the dialog to gate every path
+  /// — not just the scan flow — because the reviewer can navigate to
+  /// chat / try-on / maximise without going through the scan, and
+  /// data must not transmit on any of those paths without permission.
+  static Future<bool> ensure(BuildContext context) async {
+    if (await LocalStoreService.hasAiConsent()) return true;
+    if (!context.mounted) return false;
+    return show(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(

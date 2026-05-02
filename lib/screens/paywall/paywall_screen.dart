@@ -555,35 +555,42 @@ class _PaywallScreenState extends State<PaywallScreen> {
   Widget _disclosure() {
     final price  = _priceFor(_selected);
     final perMo  = _perMonthForAnnual();
+    // App Store guideline 2.3.10 — the iOS binary may not contain
+    // user-facing references to other platforms' billing systems.
+    // Swap "App Store / Apple ID" on iOS, "Google Play" on Android.
+    final storeAccount = Platform.isIOS ? 'App Store account'
+                                        : 'Google Play account';
 
     String text;
     switch (_selected) {
       case _Tier.monthly:
         text = 'Mirrorly Pro — monthly subscription. Your payment of '
-               '$price will be charged to your App Store (or Google '
-               'Play) account at confirmation of purchase. The '
-               'subscription automatically renews each month for $price '
-               'unless you cancel at least 24 hours before the end of '
-               'the current period. Your account will be charged for '
-               'renewal within 24 hours of the period ending. You can '
-               'manage or cancel your subscription any time in your '
-               'account settings. Uninstalling the app does NOT cancel '
-               'the subscription.';
+               '$price will be charged to your $storeAccount at '
+               'confirmation of purchase. The subscription '
+               'automatically renews each month for $price unless you '
+               'cancel at least 24 hours before the end of the current '
+               'period. Your account will be charged for renewal '
+               'within 24 hours of the period ending. You can manage '
+               'or cancel your subscription any time in your account '
+               'settings. Uninstalling the app does NOT cancel the '
+               'subscription.';
         break;
       case _Tier.annual:
         text = 'Mirrorly Pro — annual subscription. Your payment of '
                '$price (equivalent to $perMo per month) will be '
-               'charged to your App Store (or Google Play) account at '
-               'confirmation of purchase. The subscription '
-               'automatically renews each year for $price unless you '
-               'cancel at least 24 hours before the end of the '
-               'current period. Your account will be charged for '
-               'renewal within 24 hours of the period ending. You can '
-               'manage or cancel your subscription any time in your '
-               'account settings. Uninstalling the app does NOT '
-               'cancel the subscription.';
+               'charged to your $storeAccount at confirmation of '
+               'purchase. The subscription automatically renews each '
+               'year for $price unless you cancel at least 24 hours '
+               'before the end of the current period. Your account '
+               'will be charged for renewal within 24 hours of the '
+               'period ending. You can manage or cancel your '
+               'subscription any time in your account settings. '
+               'Uninstalling the app does NOT cancel the subscription.';
         break;
       case _Tier.rescue:
+        // Rescue is Android-only — the card is hidden on iOS via
+        // _showRescueCard, so this branch is only reachable on
+        // Android. Keep the Google Play wording explicit.
         text = 'Mirrorly Rescue Pack — one-time purchase of $price. '
                'NOT a subscription. Your Google Play account will be '
                'charged $price at confirmation of purchase, once. No '
@@ -604,16 +611,22 @@ class _PaywallScreenState extends State<PaywallScreen> {
   }
 
   List<String> _bulletsFor(_Tier t) {
+    // App Store guideline 2.3.10 — strip "Google Play" from the
+    // iOS binary. Cancel-instructions tell the user where to go;
+    // the right answer differs per platform.
+    final cancelLine = Platform.isIOS
+        ? 'Cancel anytime in App Store settings'
+        : 'Cancel anytime in Google Play settings';
     switch (t) {
       case _Tier.monthly:
       case _Tier.annual:
-        return const [
+        return [
           '2 scans per week',
           '10 AI-rendered images per month',
           'The Mirror — unlimited chat advice',
           'Honest-looks score (GPT-4o Vision)',
           'Geometry score (on-device, 16 metrics)',
-          'Cancel anytime in App Store or Google Play settings',
+          cancelLine,
         ];
       case _Tier.rescue:
         return const [

@@ -21,6 +21,7 @@ import '../../services/trait_builder_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 import '../../services/share_service.dart';
+import '../../widgets/common/ai_consent_dialog.dart';
 import '../../widgets/report/archetype_card.dart';
 import '../../widgets/report/feature_grid.dart';
 import '../../widgets/report/hero_card.dart';
@@ -73,6 +74,28 @@ class _ReportScreenState extends State<ReportScreen> {
   void initState() {
     super.initState();
     _rotateCopy();
+    // Defer the actual API kick-off by one frame so the in-app
+    // AI consent dialog (5.1.2(i)) can render on top of /report
+    // when the user first arrives. The scan flow already gates,
+    // but /report is also reachable via paywall-success and any
+    // future deep link, so we re-check here.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _gateAndRun());
+  }
+
+  Future<void> _gateAndRun() async {
+    // App Store guideline 5.1.2(i) — never fire /analyse or /rate
+    // (both ship the photo to OpenAI) until the user has tapped
+    // ALLOW in AiConsentDialog. ensure() short-circuits to true
+    // when the persisted flag is already set, so users who
+    // accepted during scan don't see it again. If they decline
+    // here, fall back to /home — the report cannot be produced
+    // without the third-party AI calls.
+    final consented = await AiConsentDialog.ensure(context);
+    if (!mounted) return;
+    if (!consented) {
+      context.go('/home');
+      return;
+    }
     _run();
   }
 
@@ -131,6 +154,15 @@ class _ReportScreenState extends State<ReportScreen> {
   Future<void> _generate() async {
     final a = _analysis;
     if (a == null || _generating) return;
+
+    // 5.1.2(i) gate — /maximize ships the photo to Replicate.
+    // Users reach this from a manual GENERATE tap on the hero
+    // card, which can happen long after the original scan
+    // consent (e.g. after they revoke from Settings).
+    final consented = await AiConsentDialog.ensure(context);
+    if (!mounted) return;
+    if (!consented) return;
+
     setState(() => _generating = true);
 
     final improve = a.report.fixes

@@ -1,9 +1,24 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../theme/app_colors.dart';
+
+// App Store guideline 2.3.10 — strip cross-platform billing
+// references from the iOS binary. These small helpers keep the
+// legal copy below readable while still rendering only the
+// platform-relevant phrasing on each build.
+String get _storeAccount       => Platform.isIOS ? 'App Store account'
+                                                 : 'Google Play account';
+String get _appleOrGoogleId    => Platform.isIOS ? 'Apple ID'
+                                                 : 'Google Play account';
+String get _storeName          => Platform.isIOS ? 'App Store'
+                                                 : 'Google Play';
+String get _platformAppleStore => Platform.isIOS ? 'Apple'
+                                                 : 'Google';
 
 /// Legal screens — Terms of Use + Privacy Policy. Rendered in-app so
 /// Apple App Review can reach them directly from the paywall and the
@@ -139,12 +154,12 @@ class LegalDoc {
   });
 }
 
-const termsDoc = LegalDoc(
+LegalDoc get termsDoc => LegalDoc(
   title: 'Terms of Use',
   subtitle: 'MIRRORLY · THE AGREEMENT',
-  lastUpdatedLine: 'Last updated 25 April 2026.',
+  lastUpdatedLine: 'Last updated 02 May 2026.',
   sections: [
-    LegalSection('ABOUT MIRRORLY',
+    const LegalSection('ABOUT MIRRORLY',
       'Mirrorly is a self-assessment tool for cosmetic and grooming '
       'decisions. It uses on-device face measurement (MediaPipe) plus '
       'AI image generation and analysis (Replicate, OpenAI) to show '
@@ -152,14 +167,14 @@ const termsDoc = LegalDoc(
       '"after" previews of grooming changes applied to your photo. '
       'Mirrorly is not a medical device and does not provide medical, '
       'dental, psychological, or surgical advice.'),
-    LegalSection('WHO CAN USE THIS APP',
+    const LegalSection('WHO CAN USE THIS APP',
       'You must be at least 13 years old to use Mirrorly. If you are '
       'under 18, you represent that your parent or legal guardian has '
       'reviewed and agreed to these terms on your behalf.'),
     LegalSection('ACCOUNTS',
       'Mirrorly does not require an account. Purchases and saved '
-      'scans live on your device and are tied to your App Store or '
-      'Google Play account for billing purposes only.'),
+      'scans live on your device and are tied to your '
+      '$_storeAccount for billing purposes only.'),
     LegalSection('SUBSCRIPTIONS & AUTO-RENEWAL',
       'Mirrorly offers auto-renewing subscriptions:\n\n'
       '• Mirrorly Pro Monthly — \$4.99 USD per month (or local '
@@ -168,28 +183,28 @@ const termsDoc = LegalDoc(
       'equivalent), with a 7-day free trial for new subscribers, '
       'billed annually until cancelled.\n\n'
       'Subscription terms:\n\n'
-      '• Payment is charged to your Apple ID or Google Play account '
-      'at confirmation of purchase.\n'
+      '• Payment is charged to your $_appleOrGoogleId at '
+      'confirmation of purchase.\n'
       '• Your subscription automatically renews for the same term at '
       'the same price unless you cancel at least 24 hours before the '
       'current period ends.\n'
       '• Your account is charged for renewal within 24 hours of the '
       'period ending.\n'
-      '• You can manage or cancel subscriptions in your Apple ID or '
-      'Google Play account settings at any time. Uninstalling the '
+      '• You can manage or cancel subscriptions in your '
+      '$_appleOrGoogleId settings at any time. Uninstalling the '
       'app does NOT cancel the subscription.\n'
       '• Any unused portion of a free trial period is forfeited when '
       'you purchase a subscription.\n'
       '• No refund is issued for the unused portion of the current '
-      'period. Partial refunds, where offered, are handled by Apple '
-      'or Google directly, not by Mirrorly.'),
-    LegalSection('ONE-TIME CREDIT PACKS',
+      'period. Partial refunds, where offered, are handled by '
+      '$_platformAppleStore directly, not by Mirrorly.'),
+    const LegalSection('ONE-TIME CREDIT PACKS',
       'Credit packs are non-subscription, one-time purchases. '
       'Mirrorly Rescue Pack — \$9.99 USD (or local equivalent) — '
       'grants 20 AI-rendered "after" image credits. Credits do not '
       'expire, but they are non-refundable and non-transferable '
       'between accounts or devices.'),
-    LegalSection('WHAT WE RENDER — AND WHAT WE DO NOT',
+    const LegalSection('WHAT WE RENDER — AND WHAT WE DO NOT',
       'Mirrorly renders illustrative previews of grooming and '
       'styling changes applied to your photo. These images are '
       'approximations, not photographs of real outcomes, and may '
@@ -197,7 +212,7 @@ const termsDoc = LegalDoc(
       'barber, surgeon, or dermatologist. Never use a Mirrorly '
       'rendering as the sole basis for a medical, dental, or '
       'surgical decision. Consult a licensed professional.'),
-    LegalSection('YOUR CONTENT',
+    const LegalSection('YOUR CONTENT',
       'You retain all rights to photos you take inside Mirrorly. By '
       'scanning a photo and granting in-app permission in the AI data '
       'consent dialog, you grant Mirrorly a limited, revocable, '
@@ -206,7 +221,7 @@ const termsDoc = LegalDoc(
       'to produce your measurements, score, and rendered outputs. '
       'We do not sell your photos. We do not train AI models on '
       'your photos.'),
-    LegalSection('AI DATA PERMISSION — IN-APP CONSENT GATE',
+    const LegalSection('AI DATA PERMISSION — IN-APP CONSENT GATE',
       'Before any selfie photo is transmitted to a third-party AI '
       'service, the app shows a full-screen permission dialog '
       'disclosing exactly what data is sent (the selfie photo + 16 '
@@ -221,7 +236,7 @@ const termsDoc = LegalDoc(
       'permission at any time from Settings → Revoke AI permission, '
       'which clears the consent flag and re-shows the dialog on '
       'your next scan.'),
-    LegalSection('FACE DATA — WHAT WE COLLECT, WHY, WHO RECEIVES IT, HOW LONG WE KEEP IT',
+    const LegalSection('FACE DATA — WHAT WE COLLECT, WHY, WHO RECEIVES IT, HOW LONG WE KEEP IT',
       'WHAT FACE DATA MIRRORLY COLLECTS\n\n'
       'Mirrorly collects two related pieces of face data:\n'
       '1) The selfie photograph captured with the in-app scan camera.\n'
@@ -272,36 +287,36 @@ const termsDoc = LegalDoc(
       'On OpenAI / Replicate: only for the duration of one API call.\n\n'
       'You can stop the app from collecting any face data at any time '
       'by deleting it.'),
-    LegalSection('ACCEPTABLE USE',
+    const LegalSection('ACCEPTABLE USE',
       'You agree not to use Mirrorly to scan, analyse, or render a '
       'face that is not your own without that person\'s explicit '
       'consent. You agree not to use Mirrorly outputs to harass, '
       'demean, or defame any person.'),
-    LegalSection('TERMINATION',
+    const LegalSection('TERMINATION',
       'We may suspend or terminate access for conduct that violates '
       'these terms, harms other users, or violates applicable law. '
       'You may stop using the app at any time by deleting it.'),
-    LegalSection('DISCLAIMERS & LIABILITY',
+    const LegalSection('DISCLAIMERS & LIABILITY',
       'Mirrorly is provided "as is" without warranty of any kind, '
       'express or implied. To the maximum extent permitted by law, '
       'Mirrorly\'s total liability for any claim is limited to the '
       'amount you paid Mirrorly in the twelve months preceding the '
       'claim.'),
-    LegalSection('CHANGES TO THESE TERMS',
+    const LegalSection('CHANGES TO THESE TERMS',
       'We may update these terms. Material changes will be surfaced '
       'inside the app before they take effect. Continued use after '
       'an update constitutes acceptance.'),
-    LegalSection('CONTACT',
+    const LegalSection('CONTACT',
       'Questions? Email info@m2mb.co.uk.'),
   ],
 );
 
-const privacyDoc = LegalDoc(
+LegalDoc get privacyDoc => LegalDoc(
   title: 'Privacy Policy',
   subtitle: 'WHAT WE COLLECT · WHERE IT GOES',
-  lastUpdatedLine: 'Last updated 25 April 2026.',
+  lastUpdatedLine: 'Last updated 02 May 2026.',
   sections: [
-    LegalSection('THE SHORT VERSION',
+    const LegalSection('THE SHORT VERSION',
       'Your photos are processed on your device. Before we send your '
       'photo to OpenAI and Replicate to generate your analysis and '
       'renders, the app shows you an in-app permission dialog '
@@ -310,7 +325,7 @@ const privacyDoc = LegalDoc(
       'we forget it. We do not sell your data. We do not train AI on '
       'your face. We do not require an account. You can revoke AI '
       'permission at any time in Settings.'),
-    LegalSection('AI DATA PERMISSION — HOW WE ASK',
+    const LegalSection('AI DATA PERMISSION — HOW WE ASK',
       'The first time you complete a scan, Mirrorly displays a '
       'full-screen permission dialog disclosing:\n\n'
       '• WHAT IS SENT: only the selfie photo you just captured plus '
@@ -332,7 +347,7 @@ const privacyDoc = LegalDoc(
       'keeps the photo entirely on your device. The choice is '
       'persisted across launches so we ask once, not every scan, '
       'unless you revoke from Settings.'),
-    LegalSection('WHAT WE COLLECT',
+    const LegalSection('WHAT WE COLLECT',
       'On your device: photos you take with the scan camera, the '
       'facial-geometry numbers derived from them (canthal tilt, jaw '
       'angle, FWHR, symmetry score, facial thirds, etc.), your score, '
@@ -345,7 +360,7 @@ const privacyDoc = LegalDoc(
       'one request (seconds), plus the measurements and the '
       'generated image URL. We do not attach your photo to a '
       'persistent account, because there is no account.'),
-    LegalSection('FACE DATA — WHAT IT IS, WHAT IT ISN\'T',
+    const LegalSection('FACE DATA — WHAT IT IS, WHAT IT ISN\'T',
       'Mirrorly uses on-device computer vision to derive geometric '
       'measurements from your selfie (Apple ML Kit on iOS, Google '
       'ML Kit on Android — both run entirely on the phone). These '
@@ -376,18 +391,18 @@ const privacyDoc = LegalDoc(
       'API inputs from training).\n'
       '• No sharing with data brokers, advertisers, or analytics '
       'partners.'),
-    LegalSection('WHO PROCESSES YOUR PHOTOS',
+    const LegalSection('WHO PROCESSES YOUR PHOTOS',
       'OpenAI — GPT-4o Vision runs your analysis and honest rating. '
       'Replicate — Google Nano Banana renders your transformation '
       'images; cdingram/face-swap locks the identity. Both providers '
       'process the photo for the duration of one API request and '
       'do not, by their terms, retain or train on the data we send '
       'them through the API.'),
-    LegalSection('WHAT WE DO NOT COLLECT',
+    const LegalSection('WHAT WE DO NOT COLLECT',
       'No name. No email. No phone number. No location. No social '
       'contacts. No tracking across other apps. No advertising '
       'identifier for profiling purposes.'),
-    LegalSection('CHILDREN',
+    const LegalSection('CHILDREN',
       'Mirrorly is not intended for children under 13. We do not '
       'knowingly collect data from children under 13. If you '
       'believe a child has used the app, email info@m2mb.co.uk '
@@ -398,20 +413,20 @@ const privacyDoc = LegalDoc(
       'Settings → App Privacy → See all app data.\n'
       'Deletion: delete the app to erase on-device data; the '
       'transient server-side request data is auto-expired.\n'
-      'Opt-out of auto-renewal: App Store or Google Play account '
-      'settings.'),
+      'Opt-out of auto-renewal: $_storeName account settings.'),
     LegalSection('PURCHASES',
-      'Billing is handled by Apple (App Store) or Google (Play '
-      'Billing). Mirrorly never sees your card number. We see only '
-      'a receipt that confirms whether your subscription is active.'),
-    LegalSection('SECURITY',
+      'Billing is handled by $_platformAppleStore '
+      '($_storeName). Mirrorly never sees your card number. We see '
+      'only a receipt that confirms whether your subscription is '
+      'active.'),
+    const LegalSection('SECURITY',
       'Photos in transit are sent over HTTPS. On your device, '
       'photos are stored in the app\'s sandboxed documents '
       'directory and are deleted when the app is uninstalled.'),
-    LegalSection('CHANGES',
+    const LegalSection('CHANGES',
       'We may update this policy. Material changes will be '
       'surfaced inside the app before they take effect.'),
-    LegalSection('CONTACT',
+    const LegalSection('CONTACT',
       'Questions or data requests? Email info@m2mb.co.uk.'),
   ],
 );

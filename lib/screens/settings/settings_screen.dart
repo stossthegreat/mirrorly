@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -102,7 +104,9 @@ class SettingsScreen extends StatelessWidget {
               _SettingTile(
                 icon: Icons.settings_rounded,
                 title: 'Manage subscription',
-                subtitle: 'Opens your App Store or Play Store settings',
+                subtitle: Platform.isIOS
+                    ? 'Opens your App Store subscription settings'
+                    : 'Opens your Google Play subscription settings',
                 onTap: () => _manageSubscription(context),
               ),
 
@@ -235,7 +239,20 @@ class SettingsScreen extends StatelessWidget {
     // need url_launcher. To avoid adding a package for a single route,
     // we show a modal telling the user exactly where to tap. Apple
     // reviewers accept this pattern when no external link is offered.
+    //
+    // App Store guideline 2.3.10 — show ONLY the platform-relevant
+    // path; iOS users must not see Google Play instructions and
+    // vice versa.
     if (!ctx.mounted) return;
+    final body = Platform.isIOS
+        ? 'Open Settings → Apple ID (your name) → Subscriptions → '
+          'Mirrorly Pro → Cancel subscription.\n\n'
+          'Cancel at least 24 hours before renewal to avoid the next '
+          'charge.'
+        : 'Open Google Play → Profile → Payments & subscriptions → '
+          'Subscriptions → Mirrorly Pro → Cancel subscription.\n\n'
+          'Cancel at least 24 hours before renewal to avoid the next '
+          'charge.';
     showModalBottomSheet(
       context: ctx,
       backgroundColor: AppColors.surface1,
@@ -250,15 +267,7 @@ class SettingsScreen extends StatelessWidget {
             _sheetHandle(),
             Text('Manage subscription', style: AppTypography.h2),
             const SizedBox(height: Sp.md),
-            Text(
-              'iOS:  Settings → Apple ID (your name) → Subscriptions → '
-              'Mirrorly Pro → Cancel subscription.\n\n'
-              'Android:  Play Store → Profile → Payments & subscriptions '
-              '→ Subscriptions → Mirrorly Pro → Cancel subscription.\n\n'
-              'Cancel at least 24 hours before renewal to avoid the next '
-              'charge.',
-              style: AppTypography.body.copyWith(height: 1.55),
-            ),
+            Text(body, style: AppTypography.body.copyWith(height: 1.55)),
             const SizedBox(height: Sp.lg),
           ],
         ),

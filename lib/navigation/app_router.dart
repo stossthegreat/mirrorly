@@ -30,8 +30,8 @@ final appRouter = GoRouter(
     GoRoute(path: '/scan',     builder: (_, __) => const ScanScreen()),
     GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
     GoRoute(path: '/protocol', builder: (_, __) => const ProtocolScreen()),
-    GoRoute(path: '/terms',    builder: (_, __) => const LegalScreen(doc: termsDoc)),
-    GoRoute(path: '/privacy',  builder: (_, __) => const LegalScreen(doc: privacyDoc)),
+    GoRoute(path: '/terms',    builder: (_, __) => LegalScreen(doc: termsDoc)),
+    GoRoute(path: '/privacy',  builder: (_, __) => LegalScreen(doc: privacyDoc)),
     GoRoute(
       path: '/report',
       builder: (context, state) {
