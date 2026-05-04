@@ -154,8 +154,72 @@ class _ScanHubTab extends StatelessWidget {
 
             _PrimaryScanCta(hasPrior: latest != null)
               .animate().fadeIn(delay: 360.ms, duration: 400.ms),
+
+            const SizedBox(height: Sp.md),
+
+            // AI-data-flow disclosure — same panel as the locked
+            // Mirror tab. Pinned to the bottom of the scan hub so a
+            // reviewer who lands here directly (no scan yet OR after
+            // a scan) sees the named third parties + the consent gate
+            // before they tap the scan CTA.
+            const _AiDataFlowPanel()
+              .animate().fadeIn(delay: 460.ms, duration: 360.ms),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Reusable disclosure panel naming OpenAI + Replicate as the AI
+/// providers Mirrorly transmits photos to (after in-app consent).
+/// Reused on the scan hub (tab 0) and the locked Mirror tab so the
+/// disclosure is visible regardless of which tab a reviewer opens
+/// first.
+class _AiDataFlowPanel extends StatelessWidget {
+  const _AiDataFlowPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(Sp.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface1,
+        borderRadius: BorderRadius.circular(Rd.lg),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.12), width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('POWERED BY · WHERE YOUR PHOTO GOES',
+            style: AppTypography.label.copyWith(
+              color: AppColors.red,
+              fontSize: 9.5, letterSpacing: 2.4,
+              fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Text('The 468-point face mesh and the 16 geometric '
+               'measurements are computed on this device by Apple '
+               'ML Kit (iOS) or Google ML Kit (Android). The '
+               'written analysis is produced by OpenAI GPT-4o '
+               'Vision; the rendered "maximised" preview is '
+               'produced by Replicate — Google Nano Banana plus '
+               'cdingram/face-swap.\n\n'
+               'When you start a scan, you will be asked permission '
+               'BEFORE your selfie photo is transmitted to those '
+               'providers. Tap CANCEL in that dialog and your '
+               'photo never leaves this device. Tap ALLOW and your '
+               'photo is sent over HTTPS to Mirrorly\'s backend, '
+               'forwarded once to OpenAI / Replicate for the '
+               'duration of one API request, and excluded from '
+               'training and long-term retention by both providers\' '
+               'standard API terms.\n\n'
+               'Settings → Revoke AI permission undoes this at any '
+               'time. See Privacy Policy for full detail.',
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 12, height: 1.55)),
+        ],
       ),
     );
   }
@@ -523,6 +587,59 @@ class _MirrorLocked extends StatelessWidget {
             ),
 
             const SizedBox(height: Sp.xl),
+
+            // AI-data-flow disclosure — required by App Store guideline
+            // 5.1.2(i). Apple flagged that this Mirror-locked page
+            // advertises AI-powered analysis + rendering without naming
+            // the third-party AI providers the photo gets sent to. This
+            // panel names them up-front, before the user taps the
+            // primary CTA, so the disclosure can be read on the very
+            // first screen a reviewer sees in the Mirror tab.
+            Container(
+              padding: const EdgeInsets.all(Sp.md),
+              decoration: BoxDecoration(
+                color: AppColors.surface1,
+                borderRadius: BorderRadius.circular(Rd.lg),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.12), width: 0.8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('POWERED BY · WHERE YOUR PHOTO GOES',
+                    style: AppTypography.label.copyWith(
+                      color: AppColors.red,
+                      fontSize: 9.5, letterSpacing: 2.4,
+                      fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  Text('The 468-point face mesh and the 16 geometric '
+                       'measurements are computed entirely on this '
+                       'device by Apple ML Kit (iOS) or Google ML Kit '
+                       '(Android). The written analysis is produced '
+                       'by OpenAI GPT-4o Vision; the rendered '
+                       '"maximised" preview is produced by Replicate '
+                       '— Google Nano Banana plus cdingram/face-swap.\n\n'
+                       'When you tap "Scan to unlock", the scan flow '
+                       'will ask permission BEFORE your selfie photo '
+                       'is transmitted to those providers. Tap CANCEL '
+                       'in that dialog and your photo never leaves '
+                       'this device. Tap ALLOW and your photo is '
+                       'sent over HTTPS to Mirrorly\'s backend, '
+                       'forwarded once to OpenAI / Replicate for the '
+                       'duration of one API request, and excluded '
+                       'from training and long-term retention by '
+                       'both providers\' standard API terms.\n\n'
+                       'Settings → Revoke AI permission undoes this '
+                       'at any time. See Privacy Policy for full '
+                       'detail.',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 12, height: 1.55)),
+                ],
+              ),
+            ).animate().fadeIn(delay: 400.ms, duration: 360.ms),
+
+            const SizedBox(height: Sp.lg),
 
             // Primary CTA — same language + weight as the scan-tab button so
             // the handoff feels like one continuous flow.
