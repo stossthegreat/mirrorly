@@ -85,14 +85,47 @@
   <h2>Your content</h2>
   <p>You retain all rights to photos you take inside Mirrorly. By scanning a photo and granting in-app permission in the AI data consent dialog, you grant Mirrorly a limited, revocable, royalty-free licence to process that photo on your device and transmit it to our AI providers (OpenAI and Replicate) solely to produce your measurements, score, and rendered outputs. We do not sell your photos. We do not train AI models on your photos.</p>
 
-  <h2>AI data permission — in-app consent gate</h2>
-  <p>Before any selfie photo is transmitted to a third-party AI service, the app shows a full-screen permission dialog disclosing:</p>
+  <h2>AI data permission — every detail of what gets sent, where, and why</h2>
+  <p>At the end of onboarding, before any photo bytes leave your device, Mirrorly displays a full-screen permission dialog ("PERMISSION TO SHARE YOUR PHOTO WITH AI PROVIDERS"). The same dialog is also shown the first time you reach any other AI-firing path (Mirror chat, try-on render, maximise) if it has not already been answered. You must tap <strong>ALLOW</strong> for any photo bytes to be transmitted; tapping <strong>CANCEL</strong> keeps the photo entirely on your device and aborts the analysis.</p>
+
+  <h3>Exactly what is sent</h3>
+  <ol>
+    <li>The selfie photo you captured (JPEG, compressed, base64-encoded inside an HTTPS POST body).</li>
+    <li>Sixteen geometric measurements computed on-device by Apple ML Kit (iOS) or Google ML Kit (Android) before transmission: canthal-tilt angle (degrees), jaw apex angle (degrees), face width-to-height ratio, facial-symmetry score (0–100), facial-thirds split (top/mid/lower percentages), eye-spacing ratio, lip fullness, brow-to-eye gap, philtrum ratio, interpupillary-distance ratio, nose-length ratio, face-length ratio, head-shape category (long / oval / square / broad / round).</li>
+  </ol>
+  <p><strong>Not sent:</strong> name, email, phone, postal address, location, contacts, IP-based tracking IDs, advertising IDs, social-login data — none leave your device.</p>
+
+  <h3>Exact route the photo takes</h3>
+  <p><strong>Step 1 — your phone &rarr; Mirrorly's backend</strong> at <code>https://mirrorly-production.up.railway.app</code>, encrypted by HTTPS / TLS 1.3. Mirrorly's backend does NOT persist photo bytes; it forwards in-memory and returns the response.</p>
+  <p><strong>Step 2 — Mirrorly's backend &rarr; AI provider</strong>:</p>
   <ul>
-    <li><strong>What is sent:</strong> the selfie photo + the 16 on-device geometric measurements.</li>
-    <li><strong>Who receives it:</strong> OpenAI (GPT-4o Vision) for the analysis text; Replicate (Google Nano Banana + cdingram/face-swap) for the rendered preview.</li>
-    <li><strong>How long they keep it:</strong> the duration of one API request, excluded from training and long-term retention by the providers' default API terms.</li>
+    <li><code>POST /analyse</code> and <code>POST /rate</code> &rarr; OpenAI GPT-4o Vision (<code>api.openai.com</code>) for analysis text and honest-looks rating.</li>
+    <li><code>POST /maximize</code> and <code>POST /tryon</code> &rarr; Replicate (<code>api.replicate.com</code>) — Google Nano Banana renders the "maximised" preview, cdingram/face-swap locks identity.</li>
+    <li><code>POST /chat</code> &rarr; OpenAI for the Mirror advisor's face-specific responses.</li>
   </ul>
-  <p>You must tap <strong>ALLOW</strong> for the app to send the photo. Tapping <strong>CANCEL</strong> keeps the photo on your device and aborts the analysis. You may revoke this permission at any time from Settings &rarr; Revoke AI permission, which clears the consent flag and re-shows the dialog on your next scan.</p>
+
+  <h3>Who receives it, by name</h3>
+  <ul>
+    <li><strong>OpenAI, L.L.C.</strong> (San Francisco, CA, USA) — GPT-4o Vision endpoint.</li>
+    <li><strong>Replicate, Inc.</strong> (San Francisco, CA, USA) — Nano Banana + cdingram/face-swap endpoints.</li>
+    <li><strong>Mirrorly's own backend</strong> on Railway — transient routing only.</li>
+  </ul>
+  <p>No other party receives your photo or geometry data.</p>
+
+  <h3>How long each party keeps it</h3>
+  <ul>
+    <li><strong>On your phone</strong> — until you delete the scan inside the app or uninstall.</li>
+    <li><strong>In flight</strong> — TLS 1.3 encrypted.</li>
+    <li><strong>On Mirrorly's backend</strong> — bytes not persisted; only timestamps + HTTP status codes logged, auto-expiring after 30 days.</li>
+    <li><strong>On OpenAI</strong> — duration of one request; excluded from training and long-term retention.</li>
+    <li><strong>On Replicate</strong> — duration of one inference request; excluded from training and not retained long-term.</li>
+  </ul>
+
+  <h3>Why your photo is sent</h3>
+  <p>Sole purpose: produce the analysis text, the honest-looks score, and the rendered preview that you see inside the app. Never used for advertising, profiling, identity matching, facial recognition, biometric template building, AI model training, or resale.</p>
+
+  <h3>How to revoke</h3>
+  <p>Settings &rarr; <em>Revoke AI permission</em>. The consent flag is cleared and the dialog is re-shown on your next AI-firing action. Settings &rarr; <em>Delete all data</em> wipes every on-device scan, render, and protocol.</p>
 
   <h2>Face data — what we collect, why, who receives it, how long we keep it</h2>
   <p><strong>What face data Mirrorly collects:</strong></p>
@@ -157,7 +190,7 @@
   <h2>Contact</h2>
   <p>Questions? Email <a href="mailto:info@m2mb.co.uk">info@m2mb.co.uk</a>.</p>
 
-  <div class="updated">Last updated 02 May 2026.</div>
+  <div class="updated">Last updated 04 May 2026.</div>
 </main>
 </body>
 </html>
