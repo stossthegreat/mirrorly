@@ -65,6 +65,18 @@ class GeometryOverlayPainter extends CustomPainter {
   // analyse — not a sine-wave decoration.
   final FaceGeometry? geometry;
 
+  /// Optional face bounding-box in screen-pixel space. When non-null,
+  /// the Face-ID oval guide and any other decorative elements that
+  /// would normally lock to the screen centre re-anchor here so they
+  /// follow the actual face. Used on iOS during side-profile scans
+  /// where the face naturally drifts off-centre as the user rotates
+  /// — without this the green oval floats in empty space while the
+  /// face hangs off to one side (the bug in the iOS side-profile
+  /// screenshots).
+  /// Pass null on Android — Android's behaviour is byte-identical
+  /// to before this field existed.
+  final Rect? faceBox;
+
   const GeometryOverlayPainter({
     required this.mesh,
     required this.phase,
@@ -78,6 +90,7 @@ class GeometryOverlayPainter extends CustomPainter {
     this.mirrorLR = false,
     this.denseMesh = false,
     this.geometry,
+    this.faceBox,
   });
 
   // ── Palette ───────────────────────────────────────────────────────────────
@@ -198,11 +211,39 @@ class GeometryOverlayPainter extends CustomPainter {
   //  - Hold-progress animates a bright stroke around the perimeter
   // ═══════════════════════════════════════════════════════════════════════════
   void _drawFaceOvalGuide(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height * 0.45;
-    final ovalW = size.width * 0.72;
-    final ovalH = size.width * 0.96;  // portrait ratio ~1:1.33
-    final rect = Rect.fromCenter(center: Offset(cx, cy), width: ovalW, height: ovalH);
+    final Rect rect;
+    if (faceBox != null) {
+      // Face-anchored mode (iOS side-profile scans). Inflate the
+      // detected face bbox by ~16% so the oval frames the head with
+      // a comfortable margin instead of clipping the hairline. This
+      // makes the green guide ring TRACK THE FACE during rotation
+      // rather than floating in empty screen space.
+      final bbox = faceBox!;
+      final padX = bbox.width  * 0.16;
+      final padY = bbox.height * 0.20;
+      rect = Rect.fromCenter(
+        center: bbox.center,
+        width:  bbox.width  + padX * 2,
+        height: bbox.height + padY * 2,
+      );
+    } else {
+      // Default (Android, and iOS front-on): screen-locked
+      // 72% × 96% portrait oval. Unchanged from the original impl.
+      final scx = size.width / 2;
+      final scy = size.height * 0.45;
+      final ovalW = size.width * 0.72;
+      final ovalH = size.width * 0.96;  // portrait ratio ~1:1.33
+      rect = Rect.fromCenter(
+        center: Offset(scx, scy), width: ovalW, height: ovalH);
+    }
+
+    // Locals derived from `rect` so the tick-mark loop and any other
+    // ring-following math below work regardless of which branch built
+    // the rect (face-anchored vs screen-locked).
+    final cx    = rect.center.dx;
+    final cy    = rect.center.dy;
+    final ovalW = rect.width;
+    final ovalH = rect.height;
 
     // Color by status — matches research guide (idle/adjusting/locked)
     const idleColor      = Color(0xFF8A8F98);
@@ -856,9 +897,19 @@ class GeometryOverlayPainter extends CustomPainter {
     final sym     = g?.symmetryScore      ?? (87 + math.sin(animT * 1.3) * 0.8);
     final nose    = g?.noseLengthRatio    ?? (0.34 + math.sin(animT * 1.5) * 0.008);
 
+    // Canthal tilt clamps to ±10° in FaceGeometryService when the
+    // eye-corner detection breaks down (typically head rotated > 25°).
+    // Showing "CANTHAL 10.00°" in that state is misleading — replace
+    // with a dash so the user reads "couldn't measure this angle yet"
+    // instead of "your tilt is locked at the maximum". Same logic used
+    // in _drawFloatingMeasurements + _drawMeasurementArcs below.
+    final canthalText = canthal.abs() >= 9.5
+        ? 'EYE TILT · —'
+        : 'EYE TILT · ${canthal.toStringAsFixed(2)}°';
+
     // 5 rails — each: (anchor index, left-side boolean, label text, delay)
     final rails = <({int anchor, bool leftSide, String label, double delayFrac})>[
-      (anchor: 33,    leftSide: true,  label: 'EYE TILT · ${canthal.toStringAsFixed(2)}°', delayFrac: 0.00),
+      (anchor: 33,    leftSide: true,  label: canthalText, delayFrac: 0.00),
       (anchor: 454,   leftSide: false, label: 'SYM · ${sym.toStringAsFixed(0)}%',          delayFrac: 0.10),
       (anchor: 234,   leftSide: true,  label: 'FWHR · ${fwhr.toStringAsFixed(2)}',         delayFrac: 0.20),
       (anchor: 1,     leftSide: false, label: 'NOSE · ${nose.toStringAsFixed(2)}',         delayFrac: 0.30),
@@ -1502,8 +1553,15 @@ class GeometryOverlayPainter extends CustomPainter {
     final fwhr    = g?.fwhr          ?? (1.87 + math.sin(animT * 1.9) * 0.015);
     final sym     = g?.symmetryScore ?? (87 + math.sin(animT * 1.3) * 0.8);
 
+    // Suppress canthal value when it's at the ±10° clamp boundary —
+    // means the eye-corner detection broke down (face rotated > ~25°).
+    // Showing "CANTHAL 10.00°" in that state is misleading.
+    final canthalLabel = canthal.abs() >= 9.5
+        ? 'CANTHAL —'
+        : 'CANTHAL ${canthal.toStringAsFixed(2)}°';
+
     final readouts = <(Offset?, String, double)>[
-      (px(FaceMesh.idxLeftEyeOuter),  'CANTHAL ${canthal.toStringAsFixed(2)}°', 0.00),
+      (px(FaceMesh.idxLeftEyeOuter),  canthalLabel,                              0.00),
       (px(FaceMesh.idxChin),          'JAW ${jaw.toStringAsFixed(0)}°',         0.20),
       (px(FaceMesh.idxCheekL),        'FWHR ${fwhr.toStringAsFixed(2)}',        0.40),
       (px(FaceMesh.idxCheekR),        'SYM ${sym.toStringAsFixed(0)}%',         0.60),
@@ -1856,8 +1914,12 @@ class GeometryOverlayPainter extends CustomPainter {
     final t1 = (g?.facialThirdTop ?? 33).round();
     final t2 = (g?.facialThirdMid ?? 33).round();
     final t3 = (g?.facialThirdLow ?? 34).round();
+    // Same clamp-boundary suppression as the floating labels above.
+    final canthalStr = canthal.abs() >= 9.5
+        ? 'CANTHAL —'
+        : 'CANTHAL ${canthal.toStringAsFixed(2)}°';
     final values = <String>[
-      'CANTHAL ${canthal.toStringAsFixed(2)}°',
+      canthalStr,
       'SYM ${sym.toStringAsFixed(1)}%',
       'FWHR ${fwhr.toStringAsFixed(2)}',
       'JAW ${jaw.toStringAsFixed(0)}°',

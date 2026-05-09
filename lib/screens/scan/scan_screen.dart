@@ -1014,6 +1014,47 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  /// Compute the face's bounding box in painter-canvas-pixel space
+  /// from the current mesh, on iOS only. Returns null on Android (or
+  /// when the mesh is missing / invalid) so the painter falls back
+  /// to its existing screen-locked behaviour — Android's experience
+  /// is unchanged.
+  ///
+  /// Why iOS-only: Android runs real MediaPipe and the face stays
+  /// roughly centred in the user's natural framing, so a screen-
+  /// locked oval works fine. iOS synthesises the mesh from ML Kit
+  /// contours, and during side-profile rotation the face naturally
+  /// drifts off-centre — the painter's screen-locked oval ends up
+  /// floating in empty space (the bug shown in the side-profile
+  /// screenshots). Anchoring the oval to the actual face bbox keeps
+  /// the lock-on experience equivalent to the front-on capture.
+  Rect? _computeFaceBoxIos(Size canvasSize) {
+    if (!Platform.isIOS) return null;
+    final m = _mesh;
+    if (m == null || !m.isValid || m.points.isEmpty) return null;
+    final pts = m.points;
+    double minX = pts.first.dx, maxX = pts.first.dx;
+    double minY = pts.first.dy, maxY = pts.first.dy;
+    for (final p in pts) {
+      if (p.dx < minX) minX = p.dx;
+      if (p.dx > maxX) maxX = p.dx;
+      if (p.dy < minY) minY = p.dy;
+      if (p.dy > maxY) maxY = p.dy;
+    }
+    // Mesh points are in 0..1 normalised painter-canvas coords.
+    // Reject degenerate boxes (e.g. when only fallback landmarks
+    // are populated and they cluster at one point).
+    final nW = maxX - minX;
+    final nH = maxY - minY;
+    if (nW < 0.05 || nH < 0.05) return null;
+    return Rect.fromLTRB(
+      minX * canvasSize.width,
+      minY * canvasSize.height,
+      maxX * canvasSize.width,
+      maxY * canvasSize.height,
+    );
+  }
+
   // Cover-fill camera: scale the CameraPreview's natural AspectRatio box
   // up until it fully covers the screen (parts of the preview are clipped on
   // the overflow side). The mesh overlay is passed as CameraPreview's `child`
@@ -1057,6 +1098,14 @@ class _ScanScreenState extends State<ScanScreen> with TickerProviderStateMixin {
                   // sees their ACTUAL canthal tilt, jaw angle, FWHR,
                   // symmetry instead of a hardcoded sine-wave wiggle.
                   geometry:     _geometry,
+                  // iOS-only face-anchored oval. Android already
+                  // tracks fine via real MediaPipe; passing null
+                  // there preserves the existing screen-locked
+                  // oval the user described as "elite". On iOS the
+                  // synthesised mesh drifts off-centre during side
+                  // profiles, so we re-anchor the oval to the
+                  // mesh's bounding box every frame.
+                  faceBox:      _computeFaceBoxIos(constraints.biggest),
                 ),
               ),
             ),
