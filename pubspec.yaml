@@ -1,7 +1,7 @@
 name: mirror
 description: "Real facial geometry analysis. Not a rating. Measurements."
 publish_to: 'none'
-version: 1.1.1+16
+version: 1.1.1+17
 
 environment:
   sdk: ^3.8.0
@@ -59,15 +59,16 @@ flutter:
   assets:
     - assets/icons/appstore.png
     - assets/icons/playstore.png
-    # Mirror-tab pre-scan before/after thumbnails. Six files; if any
-    # are missing the UI falls back to a tasteful placeholder so the
-    # build never breaks. See assets/marketing/README.md for specs.
-    - assets/marketing/hair-before.jpg
-    - assets/marketing/hair-after.jpg
-    - assets/marketing/beard-before.jpg
-    - assets/marketing/beard-after.jpg
-    - assets/marketing/frames-before.jpg
-    - assets/marketing/frames-after.jpg
+    # Mirror-tab pre-scan before/after thumbnails. Declared as a
+    # directory so the build doesn't fail when individual JPEGs
+    # haven't been dropped yet — Flutter bundles whatever exists in
+    # the folder, and the Image.asset errorBuilder in
+    # _BeforeAfterCard falls back to a placeholder face icon when
+    # any specific file is missing. Drop the six JPEGs (hair-before
+    # / hair-after / beard-before / beard-after / frames-before /
+    # frames-after, 4:5 portrait) per assets/marketing/README.md
+    # and they auto-bundle on next build — no pubspec edit needed.
+    - assets/marketing/
 
 # Generates every iOS + Android launcher icon from two master PNGs.
 # Run after dropping new masters:  dart run flutter_launcher_icons
