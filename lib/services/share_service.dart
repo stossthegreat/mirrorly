@@ -27,7 +27,9 @@ class ShareService {
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
-      await _shareBytes(byteData.buffer.asUint8List(), suggestedName, text);
+      final origin = _sharePositionOriginFromKey(key);
+      await _shareBytes(byteData.buffer.asUint8List(), suggestedName, text,
+          origin: origin);
     } catch (_) {}
   }
 
@@ -63,6 +65,18 @@ class ShareService {
       );
     }
 
+    // Anchor for the iOS share sheet — REQUIRED on iPad (the system
+    // pops the action sheet from a popover that needs a source rect),
+    // and useful on iPhone too because under iOS 26's UIScene
+    // lifecycle the legacy keyWindow lookup share_plus uses returns
+    // a stale window and the sheet silently fails to present (the
+    // bug the founder reported as "tap acts like it's doing
+    // something but doesn't"). Anchor the popover to the top-centre
+    // of the screen — invisible on iPhone, correctly placed on iPad.
+    final mq = MediaQuery.of(context);
+    final origin = Rect.fromLTWH(
+      mq.size.width / 2 - 1, mq.padding.top + 8, 2, 2);
+
     String? errorMsg;
     try {
       if (!context.mounted) return;
@@ -89,6 +103,7 @@ class ShareService {
           bytes,
           'mirrorly-${DateTime.now().millisecondsSinceEpoch}.png',
           text,
+          origin: origin,
         );
         return;
       }
@@ -109,14 +124,37 @@ class ShareService {
   }
 
   static Future<void> _shareBytes(
-      Uint8List bytes, String name, String? text) async {
+      Uint8List bytes, String name, String? text,
+      {Rect? origin}) async {
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/$name');
     await file.writeAsBytes(bytes, flush: true);
     await Share.shareXFiles(
       [XFile(file.path, mimeType: 'image/png')],
       text: text,
+      // Required for iPad popover; on iPhone share_plus 10.x under
+      // iOS 26 UIScene also benefits from a valid origin because the
+      // plugin's deprecated keyWindow lookup otherwise returns nil
+      // and the sheet silently fails to present.
+      sharePositionOrigin: origin,
     );
+  }
+
+  /// Best-effort source rect for the iOS share popover, derived from
+  /// a widget's RepaintBoundary key. Falls back to null if the key's
+  /// render object isn't yet attached — share_plus then computes a
+  /// default which works on iPhone but not iPad.
+  static Rect? _sharePositionOriginFromKey(GlobalKey key) {
+    try {
+      final ctx = key.currentContext;
+      if (ctx == null) return null;
+      final box = ctx.findRenderObject();
+      if (box is! RenderBox) return null;
+      final tl = box.localToGlobal(Offset.zero);
+      return tl & box.size;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Render any widget off-screen at an explicit logical size. Uses a

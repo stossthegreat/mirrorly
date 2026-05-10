@@ -22,21 +22,30 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _boot() async {
     // Minimum splash duration so the brand moment registers.
-    final onboarded = await LocalStoreService.isOnboarded();
+    final onboarded   = await LocalStoreService.isOnboarded();
+    final hasGender   = (await LocalStoreService.userGender()) != null;
     await Future.delayed(const Duration(milliseconds: 2400));
     if (!mounted) return;
-    // CONVERSION FUNNEL: kill the long onboarding detour. First
-    // launch lands on /onboarding/gender — a one-tap "men's grooming
-    // / women's beauty / skip" screen — and from there straight to
-    // /scan. The gender pick is critical because the analysis +
-    // render pipeline downstream is male-coded by default; a woman
-    // who scans without setting it gets a male-rendered "maximised"
-    // preview, which is brand-killing on first impression. One
-    // extra screen, one tap, prevents that.
+
+    // Gating order:
     //
-    // Returning (already-onboarded) users go to /home as before so
-    // they don't get re-funneled into a scan they've already done.
-    context.go(onboarded ? '/home' : '/onboarding/gender');
+    // 1) Has the user picked Men's / Women's? If NOT — even if they've
+    //    already completed onboarding on a previous version of the app
+    //    — send them to /onboarding/gender and force a pick. Without
+    //    this every analysis + render downstream stays male-coded for
+    //    women, which is brand-killing.
+    //
+    // 2) Otherwise, returning user → /home.
+    //
+    // 3) Otherwise, fresh install (no onboarded flag, no gender) →
+    //    /onboarding/gender too. Same destination as case 1 but the
+    //    gender screen also serves as the entry funnel for first
+    //    launches.
+    if (!hasGender) {
+      context.go('/onboarding/gender');
+    } else {
+      context.go(onboarded ? '/home' : '/scan');
+    }
   }
 
   @override

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -31,13 +32,14 @@ class GenderPickScreen extends StatelessWidget {
 
   const GenderPickScreen({super.key, this.fromSettings = false});
 
-  Future<void> _pick(BuildContext context, String? code) async {
+  Future<void> _pick(BuildContext context, String code) async {
     HapticFeedback.mediumImpact();
     await LocalStoreService.setUserGender(code);
-    // First-pass users get marked onboarded the moment they answer,
-    // so a re-launch goes to /home instead of dragging them back here.
+    // Mark onboarded so the splash doesn't drag the user back here on
+    // every relaunch. Splash also gates on userGender being set, so
+    // both flags need to be true to bypass the picker.
     await LocalStoreService.setOnboarded(true);
-    AnalyticsService.tabOpened('gender_pick_${code ?? "skip"}');
+    AnalyticsService.tabOpened('gender_pick_$code');
     if (!context.mounted) return;
     if (fromSettings) {
       context.pop();
@@ -108,16 +110,57 @@ class GenderPickScreen extends StatelessWidget {
                 delay: 320,
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(height: 22),
 
-              Center(
-                child: TextButton(
-                  onPressed: () => _pick(context, null),
-                  child: Text('Skip — general advice',
-                    style: AppTypography.label.copyWith(
+              // Terms + Privacy acceptance — required before the
+              // user reaches the scan / camera. Tapping a choice
+              // above implicitly agrees; the links let them read
+              // before agreeing. Apple reviewers expect this kind
+              // of disclosure to live BEFORE the camera request,
+              // not after, which is why it sits on the gender
+              // screen rather than further down the funnel.
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: RichText(
+                  textAlign: TextAlign.center,
+                  text: TextSpan(
+                    style: AppTypography.bodySmall.copyWith(
                       color: AppColors.textTertiary,
-                      fontSize: 11, letterSpacing: 1.8,
-                      fontWeight: FontWeight.w600)),
+                      fontSize: 11, height: 1.5,
+                      fontWeight: FontWeight.w500),
+                    children: [
+                      const TextSpan(text:
+                        'By tapping a choice you agree to our '),
+                      TextSpan(
+                        text: 'Terms',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppColors.textTertiary),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () {
+                            HapticFeedback.selectionClick();
+                            context.push('/terms');
+                          },
+                      ),
+                      const TextSpan(text: ' and '),
+                      TextSpan(
+                        text: 'Privacy Policy',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppColors.textTertiary),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () {
+                            HapticFeedback.selectionClick();
+                            context.push('/privacy');
+                          },
+                      ),
+                      const TextSpan(text: '.'),
+                    ],
+                  ),
                 ),
               ).animate().fadeIn(delay: 400.ms, duration: 360.ms),
 

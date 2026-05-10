@@ -187,7 +187,11 @@ class _CheckInCard extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(color: accent.withValues(alpha: 0.5), width: 0.8),
             ),
-            child: Icon(Icons.auto_awesome, color: accent, size: 18),
+            // Compass + triangle — "we draft your face like an
+            // architect drafts a building." On-brand for a clinical
+            // measurement product; replaces the generic
+            // sparkle/glitter that read as a stock UI flourish.
+            child: Icon(Icons.architecture_outlined, color: accent, size: 18),
           ),
           const SizedBox(width: Sp.md),
           Expanded(
@@ -212,8 +216,8 @@ class _CheckInCard extends StatelessWidget {
   (String, String, Color) _state(DateTime now) {
     if (latest == null) {
       return (
-        'START HERE',
-        'Scan once. Real measurements — not a guess, not a rating.',
+        'READ YOUR BONES',
+        'Sixteen measurements. On-device. Not a vibe.',
         AppColors.red,
       );
     }
@@ -449,8 +453,12 @@ class _MirrorLocked extends StatelessWidget {
 
             const SizedBox(height: Sp.xxl),
 
-            // The deadly quote — single line, no essay.
-            Text('"See yourself with the change.\nNot a stock photo. You."',
+            // The deadly quote — what the AI actually does, in
+            // language that hits. Knows your geometry to the
+            // millimetre, picks the changes, renders them on YOUR
+            // face. Italic editorial.
+            Text('"Knows your bones to the millimetre.\n'
+                 'Picks the cut. Renders it. On you."',
               style: AppTypography.h1.copyWith(
                 fontSize: 22, height: 1.3, letterSpacing: -0.4,
                 fontStyle: FontStyle.italic,
@@ -461,9 +469,11 @@ class _MirrorLocked extends StatelessWidget {
 
             const SizedBox(height: Sp.xl),
 
-            // 3-thumbnail before/after stack — HAIR / BEARD / FRAMES.
-            // Tap a card to flip between before and after.
-            const _BeforeAfterStack()
+            // BEFORE | AFTER pairs — three rows, one per category
+            // (HAIRCUT / BEARD / FRAMES). Both photos visible at
+            // once so the difference is the immediate read; no
+            // tap-to-toggle gymnastics, no hidden state.
+            const _BeforeAfterPairs()
               .animate().fadeIn(delay: 200.ms, duration: 420.ms),
 
             const SizedBox(height: Sp.xl),
@@ -513,101 +523,107 @@ class _MirrorLocked extends StatelessWidget {
   }
 }
 
-/// Three-card before/after stack for the Mirror-tab pre-scan state.
-/// Each card is a 4:5 portrait that tap-toggles between BEFORE and
-/// AFTER. Source images live in `assets/marketing/<slot>-before.jpg`
-/// and `<slot>-after.jpg` (see assets/marketing/README.md). If a
-/// JPEG is missing the card falls back to a tasteful placeholder so
+/// Mirror-tab pre-scan stack — three rows, one per category, each
+/// row showing BEFORE and AFTER side-by-side. Both visible at once
+/// so the diff is the read; no tap-to-toggle gymnastics.
+///
+/// Source images live in `assets/marketing/<slot>-before.jpg` and
+/// `<slot>-after.jpg` (see assets/marketing/README.md). If a JPEG
+/// is missing the thumbnail falls back to a tasteful placeholder so
 /// the build never breaks.
-class _BeforeAfterStack extends StatelessWidget {
-  const _BeforeAfterStack();
+class _BeforeAfterPairs extends StatelessWidget {
+  const _BeforeAfterPairs();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 220,
-      child: Row(
-        children: const [
-          Expanded(child: _BeforeAfterCard(slot: 'hair',   label: 'HAIRCUT')),
-          SizedBox(width: 8),
-          Expanded(child: _BeforeAfterCard(slot: 'beard',  label: 'BEARD')),
-          SizedBox(width: 8),
-          Expanded(child: _BeforeAfterCard(slot: 'frames', label: 'FRAMES')),
-        ],
-      ),
+    return Column(
+      children: const [
+        _BeforeAfterRow(slot: 'hair',   label: 'HAIRCUT'),
+        SizedBox(height: 14),
+        _BeforeAfterRow(slot: 'beard',  label: 'BEARD'),
+        SizedBox(height: 14),
+        _BeforeAfterRow(slot: 'frames', label: 'FRAMES'),
+      ],
     );
   }
 }
 
-class _BeforeAfterCard extends StatefulWidget {
+class _BeforeAfterRow extends StatelessWidget {
   final String slot;
   final String label;
-  const _BeforeAfterCard({required this.slot, required this.label});
-
-  @override
-  State<_BeforeAfterCard> createState() => _BeforeAfterCardState();
-}
-
-class _BeforeAfterCardState extends State<_BeforeAfterCard> {
-  bool _showAfter = false;
+  const _BeforeAfterRow({required this.slot, required this.label});
 
   @override
   Widget build(BuildContext context) {
-    final asset = 'assets/marketing/${widget.slot}-${_showAfter ? "after" : "before"}.jpg';
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        setState(() => _showAfter = !_showAfter);
-      },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(Rd.lg),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Image with a tasteful fallback if the JPEG isn't dropped yet.
-            Image.asset(
-              asset,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                color: AppColors.surface2,
-                child: const Center(
-                  child: Icon(Icons.face_outlined,
-                    size: 36, color: AppColors.textTertiary),
-                ),
-              ),
-            ),
-            // Bottom-gradient + label.
-            Positioned(
-              left: 0, right: 0, bottom: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(10, 22, 10, 10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.78)],
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(widget.label,
-                      style: AppTypography.label.copyWith(
-                        color: Colors.white, fontSize: 9.5,
-                        letterSpacing: 2.0,
-                        fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 2),
-                    Text(_showAfter ? 'AFTER · TAP' : 'BEFORE · TAP',
-                      style: AppTypography.label.copyWith(
-                        color: AppColors.red, fontSize: 8.5,
-                        letterSpacing: 1.6,
-                        fontWeight: FontWeight.w700)),
-                  ],
-                ),
-              ),
-            ),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+          style: AppTypography.label.copyWith(
+            color: AppColors.red,
+            fontSize: 9.5, letterSpacing: 2.6,
+            fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 200,
+          child: Row(
+            children: [
+              Expanded(child: _BeforeAfterTile(
+                  asset: 'assets/marketing/$slot-before.jpg',
+                  caption: 'BEFORE')),
+              const SizedBox(width: 8),
+              Expanded(child: _BeforeAfterTile(
+                  asset: 'assets/marketing/$slot-after.jpg',
+                  caption: 'AFTER')),
+            ],
+          ),
         ),
+      ],
+    );
+  }
+}
+
+class _BeforeAfterTile extends StatelessWidget {
+  final String asset;
+  final String caption;
+  const _BeforeAfterTile({required this.asset, required this.caption});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(Rd.lg),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            asset,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              color: AppColors.surface2,
+              child: const Center(
+                child: Icon(Icons.face_outlined,
+                  size: 32, color: AppColors.textTertiary),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(10, 18, 10, 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.78)],
+                ),
+              ),
+              child: Text(caption,
+                style: AppTypography.label.copyWith(
+                  color: caption == 'AFTER' ? AppColors.red : Colors.white,
+                  fontSize: 9, letterSpacing: 2.0,
+                  fontWeight: FontWeight.w800)),
+            ),
+          ),
+        ],
       ),
     );
   }
