@@ -469,10 +469,8 @@ class _MirrorLocked extends StatelessWidget {
 
             const SizedBox(height: Sp.xl),
 
-            // BEFORE | AFTER pairs — three rows, one per category
-            // (HAIRCUT / BEARD / FRAMES). Both photos visible at
-            // once so the difference is the immediate read; no
-            // tap-to-toggle gymnastics, no hidden state.
+            // BEFORE | AFTER — single pair, side-by-side. One look,
+            // one transformation, no categories.
             const _BeforeAfterPairs()
               .animate().fadeIn(delay: 200.ms, duration: 420.ms),
 
@@ -523,62 +521,32 @@ class _MirrorLocked extends StatelessWidget {
   }
 }
 
-/// Mirror-tab pre-scan stack — three rows, one per category, each
-/// row showing BEFORE and AFTER side-by-side. Both visible at once
-/// so the diff is the read; no tap-to-toggle gymnastics.
+/// Mirror-tab pre-scan stack — one BEFORE photo and one AFTER photo
+/// side-by-side. Two files total, no categories.
 ///
-/// Source images live in `assets/marketing/<slot>-before.jpg` and
-/// `<slot>-after.jpg` (see assets/marketing/README.md). If a JPEG
-/// is missing the thumbnail falls back to a tasteful placeholder so
-/// the build never breaks.
+/// Source images live at:
+///   assets/marketing/before.jpg
+///   assets/marketing/after.jpg
+/// See assets/marketing/README.md. If either is missing the tile
+/// falls back to a tasteful placeholder so the build never breaks.
 class _BeforeAfterPairs extends StatelessWidget {
   const _BeforeAfterPairs();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: const [
-        _BeforeAfterRow(slot: 'hair',   label: 'HAIRCUT'),
-        SizedBox(height: 14),
-        _BeforeAfterRow(slot: 'beard',  label: 'BEARD'),
-        SizedBox(height: 14),
-        _BeforeAfterRow(slot: 'frames', label: 'FRAMES'),
-      ],
-    );
-  }
-}
-
-class _BeforeAfterRow extends StatelessWidget {
-  final String slot;
-  final String label;
-  const _BeforeAfterRow({required this.slot, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-          style: AppTypography.label.copyWith(
-            color: AppColors.red,
-            fontSize: 9.5, letterSpacing: 2.6,
-            fontWeight: FontWeight.w800)),
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 200,
-          child: Row(
-            children: [
-              Expanded(child: _BeforeAfterTile(
-                  asset: 'assets/marketing/$slot-before.jpg',
-                  caption: 'BEFORE')),
-              const SizedBox(width: 8),
-              Expanded(child: _BeforeAfterTile(
-                  asset: 'assets/marketing/$slot-after.jpg',
-                  caption: 'AFTER')),
-            ],
-          ),
-        ),
-      ],
+    return SizedBox(
+      height: 280,
+      child: Row(
+        children: const [
+          Expanded(child: _BeforeAfterTile(
+              asset: 'assets/marketing/before.jpg',
+              caption: 'BEFORE')),
+          SizedBox(width: 10),
+          Expanded(child: _BeforeAfterTile(
+              asset: 'assets/marketing/after.jpg',
+              caption: 'AFTER')),
+        ],
+      ),
     );
   }
 }
@@ -602,14 +570,14 @@ class _BeforeAfterTile extends StatelessWidget {
               color: AppColors.surface2,
               child: const Center(
                 child: Icon(Icons.face_outlined,
-                  size: 32, color: AppColors.textTertiary),
+                  size: 36, color: AppColors.textTertiary),
               ),
             ),
           ),
           Positioned(
             left: 0, right: 0, bottom: 0,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(10, 18, 10, 8),
+              padding: const EdgeInsets.fromLTRB(12, 22, 12, 10),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
@@ -619,7 +587,7 @@ class _BeforeAfterTile extends StatelessWidget {
               child: Text(caption,
                 style: AppTypography.label.copyWith(
                   color: caption == 'AFTER' ? AppColors.red : Colors.white,
-                  fontSize: 9, letterSpacing: 2.0,
+                  fontSize: 10, letterSpacing: 2.4,
                   fontWeight: FontWeight.w800)),
             ),
           ),
