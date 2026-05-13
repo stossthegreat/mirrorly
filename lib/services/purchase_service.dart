@@ -307,28 +307,32 @@ class PurchaseService {
   }
 
   /// Map a RevenueCat error code + raw message into something a user
-  /// (and a reviewer, and us) can read. Most of these only fire on
-  /// Android because Play Billing is more chatty than StoreKit.
+  /// (and a reviewer, and us) can read. Store names are
+  /// platform-gated — Apple rejects copy that names "Google Play"
+  /// and vice versa, even in error toasts.
   static String _humanise(PurchasesErrorCode? code, String? raw) {
+    final store      = Platform.isIOS ? 'App Store'         : 'Play Store';
+    final account    = Platform.isIOS ? 'Apple ID'          : 'Google account';
+    final sideloadFix = Platform.isIOS
+        ? 'install via TestFlight.'
+        : 'install via Play Store internal testing track.';
     switch (code) {
       case PurchasesErrorCode.productNotAvailableForPurchaseError:
-        return 'Product not available in your store. The Offering may '
-               'not be live yet on Play Console / App Store Connect.';
+        return 'Product not available in your store. The offering may '
+               'not be live yet.';
       case PurchasesErrorCode.productAlreadyPurchasedError:
         return 'You already own this. Try Restore Purchases.';
       case PurchasesErrorCode.storeProblemError:
-        return 'Play Store / App Store reported a problem. Try again.';
+        return 'The $store reported a problem. Try again.';
       case PurchasesErrorCode.purchaseNotAllowedError:
         return 'Purchases are blocked on this device — check parental '
-               'controls or sign in to a Play / Apple account that has '
-               'IAP enabled.';
+               'controls or sign in to a $account that has IAP enabled.';
       case PurchasesErrorCode.purchaseInvalidError:
         return 'The store rejected the purchase as invalid.';
       case PurchasesErrorCode.networkError:
         return 'Network error. Check your connection and try again.';
       case PurchasesErrorCode.configurationError:
-        return 'Billing not configured. Sideloaded APKs cannot purchase '
-               '— install via Play Store internal testing track.';
+        return 'Billing not configured on this build — $sideloadFix';
       case PurchasesErrorCode.unsupportedError:
         return 'Billing isn\'t supported on this device or build.';
       case PurchasesErrorCode.invalidReceiptError:

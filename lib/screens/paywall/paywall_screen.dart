@@ -656,11 +656,12 @@ class _PaywallScreenState extends State<PaywallScreen> {
                'Uninstalling the app does NOT cancel the subscription.';
         break;
       case _Tier.rescue:
-        // Rescue is Android-only — the card is hidden on iOS via
-        // _showRescueCard, so this branch is only reachable on
-        // Android. Keep the Google Play wording explicit.
+        // Rescue is Android-only today (_showRescueCard gates it),
+        // but route store wording through the same Platform.isIOS
+        // helper as the subs above — defence-in-depth so if the
+        // iOS rescue SKU ever lights up the copy stays clean.
         text = 'Mirrorly Rescue Pack — one-time purchase of $price. '
-               'NOT a subscription. Your Google Play account will be '
+               'NOT a subscription. Your $storeAccount will be '
                'charged $price at confirmation of purchase, once. No '
                'auto-renewal. Each credit entitles you to one '
                'AI-rendered "after" image. Credits do not expire and '
