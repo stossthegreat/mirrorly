@@ -632,8 +632,15 @@ class _HopeCard extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          // 3. Manifesto — single line, red italic Playfair, the mission.
-          Text('Bones are not the ceiling. Execution is.',
+          // 3. Manifesto — single line, red italic Playfair, the
+          //    mission. v309 — locked variant sells the outcome
+          //    behind the paywall in the same slot: no separate
+          //    banner, no extra chrome, just a clean line that
+          //    tells the user WHY they'd unlock.
+          Text(
+            pro
+                ? 'Bones are not the ceiling. Execution is.'
+                : 'Unlock the man they see coming.',
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -933,17 +940,23 @@ class _MirrorHeroCard extends StatelessWidget {
                               fontWeight: FontWeight.w800,
                             )),
                           const SizedBox(height: 8),
-                          Text('See what could\nchange.',
+                          // v309 — bro: "the locked glow up render
+                          // don't hit hard enough. See your glow up
+                          // hits harder — an outcome that's what
+                          // people pay for." Outcome-first framing:
+                          // the noun is what the user gets, not
+                          // what the AI does.
+                          Text('See your\nglow up.',
                             style: GoogleFonts.playfairDisplay(
                               color: AppColors.textPrimary,
-                              fontSize: 20, height: 1.1,
-                              letterSpacing: -0.4,
+                              fontSize: 22, height: 1.1,
+                              letterSpacing: -0.5,
                               fontStyle: FontStyle.italic,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w900,
                             )),
                           const SizedBox(height: 6),
                           Text(
-                            'AI that knows your face.',
+                            'The version people notice.',
                             style: AppTypography.bodySmall.copyWith(
                               color: AppColors.textSecondary,
                               fontSize: 12.5, height: 1.35,

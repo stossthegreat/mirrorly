@@ -521,14 +521,30 @@ class _ReportScreenState extends State<ReportScreen> {
     if (!pro) {
       if (!mounted) return;
       HapticFeedback.mediumImpact();
-      context.push('/paywall', extra: {'source': 'render_locked'});
+      // v309 — pass afterPurchase + scan payload so a successful
+      // purchase re-lands on /report with the same MediaPipe
+      // capture instead of dumping the user on /home. Bro: "when
+      // you pay, it should unlock — not take you to Home Screen."
+      context.push('/paywall', extra: {
+        'source':        'render_locked',
+        'afterPurchase': '/report',
+        'imageBytes':    widget.imageBytes,
+        'geometry':      widget.geometry,
+        'extraImages':   widget.extraImages,
+      });
       return;
     }
     final used = await LocalStoreService.mirrorRendersThisWeek();
     if (used >= LocalStoreService.kRendersPerWeek) {
       if (!mounted) return;
       HapticFeedback.mediumImpact();
-      context.push('/paywall', extra: {'source': 'render_quota_capped'});
+      context.push('/paywall', extra: {
+        'source':        'render_quota_capped',
+        'afterPurchase': '/report',
+        'imageBytes':    widget.imageBytes,
+        'geometry':      widget.geometry,
+        'extraImages':   widget.extraImages,
+      });
       return;
     }
     HapticFeedback.heavyImpact();
@@ -899,7 +915,18 @@ class _ReportScreenState extends State<ReportScreen> {
         // ignore: discarded_futures
         AnalyticsService.reportUnlockTapped(src);
       }
-      await context.push('/paywall', extra: {'source': src});
+      // v309 — carry the scan payload + afterPurchase target so a
+      // successful purchase re-forwards to /report with the same
+      // MediaPipe capture. Without this the paywall's
+      // _forwardOnSuccess falls through to /home and the user
+      // loses their teaser context.
+      await context.push('/paywall', extra: {
+        'source':        src,
+        'afterPurchase': '/report',
+        'imageBytes':    widget.imageBytes,
+        'geometry':      widget.geometry,
+        'extraImages':   widget.extraImages,
+      });
     }
 
     return SingleChildScrollView(
