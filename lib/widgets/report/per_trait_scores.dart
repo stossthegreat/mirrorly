@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -6,12 +8,15 @@ import '../../services/honest_rating_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_typography.dart';
 
-/// PER-TRAIT SCORES — the clean stack the competitor apps lead with.
+/// PER-TRAIT SCORES — the clean ring-gauge block the competitor apps lead
+/// with.
 ///
-/// Six rows: SKIN · HAIR · JAWLINE · MASCULINITY · EYES · FACE. Each
-/// row carries a domain icon, a one-word qualifier ("Hunter Eyes",
-/// "Clear healthy skin", "High Dimorphism"), and a score chip rendered
-/// as /10 in a tier-tinted pill.
+/// Six gauges in a 3×2 grid: SKIN · HAIR · JAWLINE · MASCULINITY · EYES ·
+/// FACE. Each gauge is a rounded-cap progress ring with the score painted
+/// /100 in its centre, the trait label beneath, and a one-line qualifier
+/// tier ("Hunter eyes", "Full hair", "Off-balance") tinted to the score.
+/// The ring-gauge treatment is lifted from the Debloat readout so both
+/// apps read as one family.
 ///
 /// Data source priority:
 ///   1. [HonestRating.subScores] — GPT vision sub-scores. Present once
@@ -36,7 +41,7 @@ class PerTraitScores extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = _buildRows();
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
       decoration: BoxDecoration(
         color: AppColors.surface1,
         borderRadius: BorderRadius.circular(Rd.xl),
@@ -73,11 +78,24 @@ class PerTraitScores extends StatelessWidget {
               height: 1.4,
               fontStyle: FontStyle.italic,
             )),
-          const SizedBox(height: 12),
-          for (int i = 0; i < rows.length; i++) ...[
-            if (i > 0) const _RowDivider(),
-            _TraitRow(row: rows[i]),
-          ],
+          const SizedBox(height: 18),
+
+          // ── Per-trait ring-gauge grid ──────────────────────────────────
+          LayoutBuilder(
+            builder: (context, c) {
+              const cols = 3;
+              const gap = 12.0;
+              final tileW = (c.maxWidth - gap * (cols - 1)) / cols;
+              return Wrap(
+                spacing: gap,
+                runSpacing: 20,
+                children: [
+                  for (final row in rows)
+                    SizedBox(width: tileW, child: _GaugeTile(row: row)),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -300,83 +318,124 @@ class _TraitRowData {
   });
 }
 
-class _TraitRow extends StatelessWidget {
-  final _TraitRowData row;
-  const _TraitRow({required this.row});
+/// Maps a 0..100 trait score to the ring colour: green when elite, amber
+/// when solid, measurement-blue when mid, soft-red when a pulldown. Same
+/// thresholds the old score pills used, so the palette reads identically.
+Color _scoreColor(int score) {
+  if (score >= 80) return AppColors.signalGreen;
+  if (score >= 65) return AppColors.signalAmber;
+  if (score >= 50) return AppColors.measure;
+  return AppColors.signalRed;
+}
 
-  Color _scoreColor() {
-    if (row.score >= 80) return AppColors.signalGreen;
-    if (row.score >= 65) return AppColors.signalAmber;
-    if (row.score >= 50) return AppColors.measure;
-    return AppColors.signalRed;
-  }
+// ── Per-trait ring gauge — ring + /100 score, label, tier ───────────────────
+class _GaugeTile extends StatelessWidget {
+  final _TraitRowData row;
+  const _GaugeTile({required this.row});
 
   @override
   Widget build(BuildContext context) {
-    final color = _scoreColor();
-    final outOfTen = (row.score / 10.0).toStringAsFixed(1);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 32, height: 32,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(row.icon, color: color, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(row.label,
-                  style: GoogleFonts.inter(
-                    color: AppColors.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    height: 1.0,
-                  )),
-                const SizedBox(height: 3),
-                Text(row.tier,
-                  style: GoogleFonts.inter(
-                    color: AppColors.textTertiary,
-                    fontSize: 11.5,
-                    height: 1.2,
-                  )),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(100),
-              border: Border.all(color: color.withValues(alpha: 0.5), width: 0.8),
-            ),
-            child: Text(
-              outOfTen,
-              style: GoogleFonts.inter(
-                color: color,
-                fontWeight: FontWeight.w900,
-                fontSize: 14,
-                letterSpacing: 0.3,
+    final color = _scoreColor(row.score);
+    return Column(
+      children: [
+        SizedBox(
+          width: 62, height: 62,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: const Size(62, 62),
+                painter: _RingPainter(
+                  progress: row.score / 100,
+                  color: color,
+                  stroke: 5.5,
+                  trackColor: AppColors.surface3,
+                ),
               ),
-            ),
+              Text('${row.score}',
+                style: GoogleFonts.spaceGrotesk(
+                  color: AppColors.textPrimary,
+                  fontSize: 19, height: 1,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                )),
+            ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 9),
+        Text(row.label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.inter(
+            color: AppColors.textPrimary,
+            fontSize: 12.5, height: 1.1,
+            fontWeight: FontWeight.w800,
+          )),
+        const SizedBox(height: 3),
+        Text(row.tier.toUpperCase(),
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.label.copyWith(
+            color: color,
+            fontSize: 8, letterSpacing: 1.0, height: 1.25,
+            fontWeight: FontWeight.w900,
+          )),
+      ],
     );
   }
 }
 
-class _RowDivider extends StatelessWidget {
-  const _RowDivider();
+// ── Ring painter — rounded-cap arc from 12 o'clock, clockwise ───────────────
+class _RingPainter extends CustomPainter {
+  final double progress; // 0..1
+  final Color color;
+  final double stroke;
+  final Color trackColor;
+  const _RingPainter({
+    required this.progress,
+    required this.color,
+    required this.stroke,
+    required this.trackColor,
+  });
+
   @override
-  Widget build(BuildContext context) =>
-      Container(height: 1, color: AppColors.divider.withValues(alpha: 0.35));
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final center = rect.center;
+    final radius = (math.min(size.width, size.height) - stroke) / 2;
+
+    final track = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..color = trackColor;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2, math.pi * 2, false, track);
+
+    final p = progress.clamp(0.0, 1.0);
+    if (p > 0) {
+      final arc = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round
+        ..shader = SweepGradient(
+          startAngle: -math.pi / 2,
+          endAngle: -math.pi / 2 + math.pi * 2,
+          colors: [color.withValues(alpha: 0.7), color],
+          transform: const GradientRotation(-math.pi / 2),
+        ).createShader(Rect.fromCircle(center: center, radius: radius));
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -math.pi / 2, math.pi * 2 * p, false, arc);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.progress != progress ||
+      old.color != color ||
+      old.stroke != stroke;
 }
