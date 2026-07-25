@@ -725,28 +725,29 @@ class _ReportScreenState extends State<ReportScreen> {
 
           const SizedBox(height: Sp.lg),
 
-          // ── 2 · AI VERDICT — same inset as the per-trait card below.
+          // ── 2 · PER-TRAIT SCORES — normal inset. Sits directly beneath
+          // the hero section and ABOVE the AI Verdict cards.
+          PerTraitScores(
+            honest:   _honest,
+            geometry: widget.geometry,
+          ).animate().fadeIn(delay: 1450.ms, duration: 500.ms),
+
+          const SizedBox(height: Sp.md),
+
+          // ── 3 · AI VERDICT — same inset as the per-trait card above.
           // v216a: the previous Transform.translate(-Sp.lg) + SizedBox
           // (width: screen) trick left-bled the panel without widening
           // it (SizedBox can't override the parent's tighter constraint),
           // so the four tiles rendered flush-left with an Sp.lg×2 dead
           // strip on the right. Drop the wrapper so the verdict panel
-          // sits at the same Sp.lg gutter as PerTraitScores beneath it.
+          // sits at the same Sp.lg gutter as PerTraitScores above it.
           if (_honest?.verdict != null) ...[
             AiVerdictPanel(
               verdict: _honest!.verdict!,
               extraStrengths: _buildExtraStrengths(),
-            ).animate().fadeIn(delay: 1450.ms, duration: 500.ms),
+            ).animate().fadeIn(delay: 1500.ms, duration: 500.ms),
             const SizedBox(height: Sp.lg),
           ],
-
-          // ── 3 · PER-TRAIT SCORES — normal inset.
-          PerTraitScores(
-            honest:   _honest,
-            geometry: widget.geometry,
-          ).animate().fadeIn(delay: 1500.ms, duration: 500.ms),
-
-          const SizedBox(height: Sp.md),
 
           // ── 4 · GEOMETRY BREAKDOWN — normal inset.
           TraitGrid(traits: traits)
