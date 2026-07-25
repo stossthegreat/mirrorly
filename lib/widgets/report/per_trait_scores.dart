@@ -13,10 +13,10 @@ import '../../theme/app_typography.dart';
 ///
 /// Six gauges in a 3×2 grid: SKIN · HAIR · JAWLINE · MASCULINITY · EYES ·
 /// FACE. Each gauge is a rounded-cap progress ring with the score painted
-/// /100 in its centre, the trait label beneath, and a one-line qualifier
-/// tier ("Hunter eyes", "Full hair", "Off-balance") tinted to the score.
-/// The ring-gauge treatment is lifted from the Debloat readout so both
-/// apps read as one family.
+/// /100 in its centre and just the trait name beneath — clean visible
+/// scoring, no qualifier phrase (the detailed read lives elsewhere). The
+/// ring-gauge treatment is lifted from the Debloat readout so both apps
+/// read as one family.
 ///
 /// Data source priority:
 ///   1. [HonestRating.subScores] — GPT vision sub-scores. Present once
@@ -104,66 +104,27 @@ class PerTraitScores extends StatelessWidget {
   // ─── Row generation ────────────────────────────────────────────────────
 
   List<_TraitRowData> _buildRows() {
-    final sub  = honest?.subScores;
-    final tier = honest?.subTiers;
+    final sub = honest?.subScores;
     return [
-      _row('skin',        Icons.water_drop_outlined,
-           gptScore: sub?['skin'],        gptTier: tier?['skin'],
-           fallbackScore: _skinFromHonest(),
-           fallbackTier:  _skinTier()),
-      _row('hair',        Icons.cut_outlined,
-           gptScore: sub?['hair'],        gptTier: tier?['hair'],
-           fallbackScore: _hairFromGeometry(),
-           fallbackTier:  _hairTier()),
-      _row('jawline',     Icons.bolt_outlined,
-           gptScore: sub?['jawline'],     gptTier: tier?['jawline'],
-           fallbackScore: _jawlineFromGeometry(),
-           fallbackTier:  _jawlineTier()),
-      _row('masculinity', Icons.male_outlined,
-           gptScore: sub?['masculinity'], gptTier: tier?['masculinity'],
-           fallbackScore: _masculinityFromGeometry(),
-           fallbackTier:  _masculinityTier()),
-      _row('eyes',        Icons.remove_red_eye_outlined,
-           gptScore: sub?['eyes'],        gptTier: tier?['eyes'],
-           fallbackScore: _eyesFromGeometry(),
-           fallbackTier:  _eyesTier()),
-      _row('face',        Icons.face_outlined,
-           gptScore: sub?['face'],        gptTier: tier?['face'],
-           fallbackScore: _faceFromGeometry(),
-           fallbackTier:  _faceTier()),
+      _row('Skin',        gptScore: sub?['skin'],        fallbackScore: _skinFromHonest()),
+      _row('Hair',        gptScore: sub?['hair'],        fallbackScore: _hairFromGeometry()),
+      _row('Jawline',     gptScore: sub?['jawline'],     fallbackScore: _jawlineFromGeometry()),
+      _row('Masculinity', gptScore: sub?['masculinity'], fallbackScore: _masculinityFromGeometry()),
+      _row('Eyes',        gptScore: sub?['eyes'],        fallbackScore: _eyesFromGeometry()),
+      _row('Face',        gptScore: sub?['face'],        fallbackScore: _faceFromGeometry()),
     ];
   }
 
   _TraitRowData _row(
-    String key,
-    IconData icon, {
+    String label, {
     required int? gptScore,
-    required String? gptTier,
     required int fallbackScore,
-    required String fallbackTier,
   }) {
-    final score = gptScore ?? fallbackScore;
-    final tier  = (gptTier != null && gptTier.trim().isNotEmpty)
-        ? gptTier.trim()
-        : fallbackTier;
     return _TraitRowData(
-      key:   key,
-      icon:  icon,
-      label: _label(key),
-      tier:  tier,
-      score: score,
+      label: label,
+      score: gptScore ?? fallbackScore,
     );
   }
-
-  String _label(String key) => switch (key) {
-    'skin'        => 'Skin',
-    'hair'        => 'Hair',
-    'jawline'     => 'Jawline',
-    'masculinity' => 'Masculinity',
-    'eyes'        => 'Eyes',
-    'face'        => 'Face',
-    _             => key,
-  };
 
   // ─── Geometry-derived fallback scores (each 0..100) ────────────────────
   //
@@ -181,26 +142,10 @@ class PerTraitScores extends StatelessWidget {
     return (h - 3).clamp(0, 100);
   }
 
-  String _skinTier() {
-    final s = _skinFromHonest();
-    if (s >= 85) return 'Clear healthy skin';
-    if (s >= 72) return 'Even tone';
-    if (s >= 58) return 'Mixed clarity';
-    return 'Texture work needed';
-  }
-
   int _hairFromGeometry() {
     // No direct geometry. Default to a mid-range 65 — the GPT score
     // is the truth here once the backend extension ships.
     return honest?.score != null ? (honest!.score - 5).clamp(0, 100) : 65;
-  }
-
-  String _hairTier() {
-    final h = _hairFromGeometry();
-    if (h >= 82) return 'Full hair';
-    if (h >= 68) return 'Healthy line';
-    if (h >= 55) return 'Mild recession';
-    return 'Receding';
   }
 
   int _jawlineFromGeometry() {
@@ -226,17 +171,6 @@ class PerTraitScores extends StatelessWidget {
     return (40 + norm * 25).round().clamp(0, 65);
   }
 
-  String _jawlineTier() {
-    final s = _jawlineFromGeometry();
-    // Geometry-only ceiling is 65, so the top-tier label changes:
-    // we can never honestly call the jaw "Sharp" without GPT
-    // confirming the beard isn't doing the work.
-    if (s >= 60) return 'Estimated · clean-shave for true read';
-    if (s >= 52) return 'Defined';
-    if (s >= 45) return 'Normal jawline';
-    return 'Soft';
-  }
-
   int _masculinityFromGeometry() {
     // Composite: FWHR (target ~2.0), jawAngle (lower = more dimorphic),
     // chin projection. Each contributes 1/3 of the score.
@@ -253,14 +187,6 @@ class PerTraitScores extends StatelessWidget {
     return (35 + composite * 40).round().clamp(0, 75);
   }
 
-  String _masculinityTier() {
-    final s = _masculinityFromGeometry();
-    if (s >= 70) return 'Estimated · clean-shave for true read';
-    if (s >= 60) return 'Above average';
-    if (s >= 50) return 'Average';
-    return 'Below average';
-  }
-
   int _eyesFromGeometry() {
     // Canthal tilt (positive = hunter), plus symmetry. Canthal tilt
     // observed range: -2 to +6 degrees. Hunter at +4 and up.
@@ -268,15 +194,6 @@ class PerTraitScores extends StatelessWidget {
     final sym     = (geometry.symmetryScore / 100).clamp(0.0, 1.0);
     final composite = tilt * 0.6 + sym * 0.4;
     return (35 + composite * 60).round().clamp(0, 100);
-  }
-
-  String _eyesTier() {
-    final s = _eyesFromGeometry();
-    final tilt = geometry.canthalTilt;
-    if (s >= 82 && tilt > 3) return 'Hunter eyes';
-    if (s >= 70) return 'Neutral tilt';
-    if (s >= 55) return 'Mild positive tilt';
-    return 'Negative tilt';
   }
 
   int _faceFromGeometry() {
@@ -291,29 +208,15 @@ class PerTraitScores extends StatelessWidget {
     final sym = (geometry.symmetryScore / 100).clamp(0.0, 1.0);
     return (40 + (balance * 0.7 + sym * 0.3) * 55).round().clamp(0, 100);
   }
-
-  String _faceTier() {
-    final s = _faceFromGeometry();
-    if (s >= 82) return 'Harmonious thirds';
-    if (s >= 68) return 'Balanced';
-    if (s >= 55) return 'Normal';
-    return 'Off-balance';
-  }
 }
 
 // ─── Internal types ────────────────────────────────────────────────────────
 
 class _TraitRowData {
-  final String   key;
-  final IconData icon;
-  final String   label;
-  final String   tier;
-  final int      score; // 0..100
+  final String label;
+  final int    score; // 0..100
   const _TraitRowData({
-    required this.key,
-    required this.icon,
     required this.label,
-    required this.tier,
     required this.score,
   });
 }
@@ -328,7 +231,7 @@ Color _scoreColor(int score) {
   return AppColors.signalRed;
 }
 
-// ── Per-trait ring gauge — ring + /100 score, label, tier ───────────────────
+// ── Per-trait ring gauge — ring + /100 score + trait name ───────────────────
 class _GaugeTile extends StatelessWidget {
   final _TraitRowData row;
   const _GaugeTile({required this.row});
@@ -362,25 +265,16 @@ class _GaugeTile extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 9),
+        const SizedBox(height: 10),
         Text(row.label,
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.inter(
-            color: AppColors.textPrimary,
+            color: AppColors.textSecondary,
             fontSize: 12.5, height: 1.1,
-            fontWeight: FontWeight.w800,
-          )),
-        const SizedBox(height: 3),
-        Text(row.tier.toUpperCase(),
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: AppTypography.label.copyWith(
-            color: color,
-            fontSize: 8, letterSpacing: 1.0, height: 1.25,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
           )),
       ],
     );
