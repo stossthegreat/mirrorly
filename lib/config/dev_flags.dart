@@ -47,10 +47,19 @@
 /// in the limits back up, I'm gonna put in distribution." Every
 /// paywall is live again and all five weekly cap counters count for
 /// real (the LocalStoreService guards deactivate with this flag).
+///
+/// v383 — flipped back to TRUE per bro: "turn the subscription limits
+/// off so I can test." TEMPORARY test build.
+///
+/// v384 — FALSE again per bro: "push a build for the new Apple
+/// account, make sure all the paywall stuff is live." This is the
+/// distribution build for the transferred app — every paywall armed,
+/// all five weekly caps counting, bypass-era subscribed cache cleared
+/// by the v375 one-shot.
 const kBypassPaywall = false;
 
 /// Human-readable build tag shown tiny on the paywall so we can instantly
 /// tell which build is actually installed on-device (TestFlight lag has
 /// repeatedly made us debug a stale build). Bump this with every pubspec
 /// build-number bump.
-const kBuildTag = 'b382';
+const kBuildTag = 'b384';
