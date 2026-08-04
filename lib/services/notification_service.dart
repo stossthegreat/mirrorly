@@ -426,25 +426,25 @@ class NotificationService {
   }) {
     if (streakDays <= 0) {
       return (
-        'Take today\'s test',
-        'One round with Lucien or one aura lock. The climb starts now.',
+        'Start today\'s log',
+        'One protocol check-in. The climb starts now.',
       );
     }
     if (atRisk) {
       return (
         'Don\'t fold on $streakDays',
-        'The man you\'re building is watching. One rep keeps the run alive.',
+        'The man you\'re building is watching. One log keeps the run alive.',
       );
     }
     if (trainedToday) {
       return (
         '$streakDays-day climb',
-        'Today\'s reps are in. Come back tomorrow — the ascension continues.',
+        'Today\'s log is in. Come back tomorrow — the ascension continues.',
       );
     }
     return (
-      'Your reps are waiting',
-      'Test your game or lock your aura. Keep the $streakDays-day climb.',
+      'Your log is waiting',
+      'Two minutes on the protocol. Keep the $streakDays-day climb.',
     );
   }
 
@@ -452,7 +452,7 @@ class NotificationService {
     android: AndroidNotificationDetails(
       'mirrorly.training', 'Training streak',
       channelDescription:
-          'Daily nudge to run an Eyes / Game drill and keep the streak alive.',
+          'Daily nudge to log your protocol and keep the streak alive.',
       importance: Importance.high, priority: Priority.high,
     ),
     iOS: DarwinNotificationDetails(badgeNumber: 1),

@@ -28,24 +28,23 @@ import 'protocol_service.dart';
 /// clock and rebuilds the whole horizon from the current state, so the
 /// ladder only ever fires when the user actually goes quiet.
 ///
-/// TWO BEATS A DAY, mapped to the brand story "Looks get attention.
-/// Game keeps it.":
+/// v381 — LOOKS + BODY ONLY. Game/roleplay/Lucien copy is gone with the
+/// looks pivot. Two beats a day:
 ///   • MORNING (09:00) — the DREAM pump. Aspirational, identity-forward.
-///     "Become the guy she notices." Pulls the user toward the version of
-///     himself the app builds.
-///   • EVENING (19:30) — the STREAK / loss nudge. Powerful, loss-framed,
-///     state-aware. "Don't fold on yourself." Drives the daily ritual.
+///     "Become the guy she notices." Looks-first, body woven in.
+///   • EVENING (19:30) — the STREAK / loss nudge. Loss-framed,
+///     state-aware. "Don't fold on yourself." Drives the daily protocol
+///     log, pushes the body scan when the user hasn't run one.
 ///
 /// THE STATE MACHINE — one read, projected forward per day:
-///   NO_SCAN            — never scanned
-///   POST_SCAN_NO_GAME  — scanned but never opened Free Flow
-///   PROTOCOL_ACTIVE    — currently checked in on at least one axis
-///   PROTOCOL_BROKEN    — at least one protocol's streak just broke
-///   GAME_STALE_3D      — 3-6 days since last Free Flow
-///   GAME_STALE_7D      — 7-13 days since last Free Flow
-///   DORMANT_7D         — 7-13 days since last app open
-///   DORMANT_14D        — 14+ days since last app open
-///   DEFAULT            — active user, no specific signal
+///   NO_SCAN              — never scanned the face
+///   POST_SCAN_NO_PROTOCOL— scanned but never committed a protocol
+///   PROTOCOL_ACTIVE      — currently checked in on at least one axis
+///   PROTOCOL_BROKEN      — at least one protocol's streak just broke
+///   NO_BODY_SCAN         — protocols live, body never scanned (sprinkled)
+///   DORMANT_7D           — 7-13 days since last app open
+///   DORMANT_14D          — 14+ days since last app open
+///   DEFAULT              — active user, no specific signal
 ///
 /// THE COPY — friend-warning + every-man's-dream voice. No emojis. No
 /// "Hey [name]!". Specific, identity-anchored, never corporate cheer.
@@ -72,6 +71,11 @@ class DailyNudgeService {
   static const _kLastFreeFlowKey = 'nudge.last_freeflow_ms';
   static const _kLastAppOpenKey  = 'nudge.last_app_open_ms';
 
+  /// Body-tab result marker — written by body_tab_screen when a render
+  /// lands. Read here so the ladder can push the body scan to users
+  /// who've never run one.
+  static const _kBodyAfterKey = 'body.after.url.v1';
+
   static FlutterLocalNotificationsPlugin get _plugin =>
       NotificationService.plugin;
 
@@ -83,6 +87,9 @@ class DailyNudgeService {
     await reschedule();
   }
 
+  /// Legacy mark from the parked Game tab (free_flow_screen still calls
+  /// it). The stamp is kept for continuity but no longer drives any
+  /// nudge state — the ladder is looks/body only since v381.
   static Future<void> markFreeFlowSession() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_kLastFreeFlowKey, DateTime.now().millisecondsSinceEpoch);
@@ -179,21 +186,13 @@ class DailyNudgeService {
   // ── State read + projection ─────────────────────────────────────────
 
   static Future<_Signals> _readSignals() async {
-    final prefs    = await SharedPreferences.getInstance();
-    final scan     = await LocalStoreService.latestScan();
-    final gameUsed = await LocalStoreService.gameFreeUsed();
-    final actives  = await ProtocolService.loadAllActive();
+    final prefs   = await SharedPreferences.getInstance();
+    final scan    = await LocalStoreService.latestScan();
+    final actives = await ProtocolService.loadAllActive();
 
     final now = DateTime.now();
-    final lastFreeFlowMs = prefs.getInt(_kLastFreeFlowKey) ?? 0;
     final lastOpenMs =
         prefs.getInt(_kLastAppOpenKey) ?? now.millisecondsSinceEpoch;
-
-    final daysSinceFreeFlow = lastFreeFlowMs == 0
-        ? 9999
-        : now
-            .difference(DateTime.fromMillisecondsSinceEpoch(lastFreeFlowMs))
-            .inDays;
     final daysSinceOpen = now
         .difference(DateTime.fromMillisecondsSinceEpoch(lastOpenMs))
         .inDays;
@@ -203,38 +202,37 @@ class DailyNudgeService {
 
     return _Signals(
       hasScan:           scan != null,
-      gameUsed:          gameUsed,
+      hasBodyScan:       (prefs.getString(_kBodyAfterKey) ?? '').isNotEmpty,
       hasActiveProtocol: actives.isNotEmpty,
       hasBrokenProtocol: broken,
-      daysSinceFreeFlow: daysSinceFreeFlow,
       daysSinceOpen:     daysSinceOpen,
     );
   }
 
   /// Project the state [dayOffset] days into the future, assuming the user
   /// does NOT reopen (every real open rebuilds the horizon from scratch).
-  /// days-since-open and days-since-free-flow both grow with the offset, so
-  /// the dormancy ladder escalates on its own across the queued horizon.
+  /// days-since-open grows with the offset, so the dormancy ladder
+  /// escalates on its own across the queued horizon.
   static _NudgeState _stateFor(_Signals s, int dayOffset) {
-    final dso  = s.daysSinceOpen + dayOffset;
-    final dsff = s.daysSinceFreeFlow + dayOffset;
+    final dso = s.daysSinceOpen + dayOffset;
 
-    if (!s.hasScan)            return _NudgeState.noScan;
+    if (!s.hasScan)           return _NudgeState.noScan;
     if (dso >= 14)            return _NudgeState.dormant14d;
     if (dso >= 7)             return _NudgeState.dormant7d;
     if (s.hasBrokenProtocol)  return _NudgeState.protocolBroken;
-    if (s.hasActiveProtocol)  return _NudgeState.protocolActive;
-    if (!s.gameUsed)          return _NudgeState.postScanNoGame;
-    if (dsff >= 7)            return _NudgeState.gameStale7d;
-    if (dsff >= 3)            return _NudgeState.gameStale3d;
-    return _NudgeState.defaultState;
+    if (!s.hasActiveProtocol) return _NudgeState.postScanNoProtocol;
+    // Protocols live. Every third evening, pitch the body scan until
+    // they've run one — the second product, sold without spamming.
+    if (!s.hasBodyScan && dayOffset % 3 == 2) {
+      return _NudgeState.noBodyScan;
+    }
+    return _NudgeState.protocolActive;
   }
 
   // ── MORNING: dream / identity pump ──────────────────────────────────
-  // The aspirational beat. Pulls the user toward the man the app builds —
-  // the guy she notices, the guy whose game means any room is handled.
-  // Pre-scan users get the "start the build" variant; everyone else gets
-  // the full identity pump. Varied by day so the week never repeats.
+  // The aspirational beat. Looks-first, body woven in — the guy she
+  // notices, the frame under the face. Pre-scan users get the "start
+  // the build" variant. Varied by day so the week never repeats.
 
   static (String, String) _dreamCopy(_Signals s, int dayOffset) {
     final pool = s.hasScan ? _dreamPool : _dreamPreScanPool;
@@ -246,7 +244,7 @@ class DailyNudgeService {
      'It starts with one 30-second scan. Find your starting line.'),
     ('Become impossible to overlook',
      'Scan tonight. Get the plan. Build the man.'),
-    ('Looks get attention. Game keeps it',
+    ('She sees you before she hears you',
      'You haven\'t even scanned yet. Start today.'),
     ('The guy she notices is one scan away',
      '30 seconds. Then we build him together.'),
@@ -254,35 +252,35 @@ class DailyNudgeService {
 
   static const _dreamPool = <(String, String)>[
     ('Become the guy she notices',
-     'Looks get attention. Game keeps it. Put in today\'s reps.'),
+     'Looks open the door. Yours aren\'t maxed yet. Today\'s rep.'),
     ('The room turns for the prepared',
-     'Two minutes today on the man it turns for.'),
-    ('She remembers the one who knew what to say',
-     'Not the loudest. The smoothest. Train it today.'),
-    ('Any room. Any conversation. Handled',
-     'That\'s the goal. One rep a day gets you there.'),
+     'Two minutes today on the face it turns for.'),
+    ('She sees you before she hears you',
+     'Make the first look land. Log today\'s protocol.'),
+    ('Any room. First glance. Handled',
+     'That\'s the goal. One logged day at a time.'),
     ('Looks open the door',
-     'Game walks you through it. Sharpen both today.'),
-    ('Be the hardest man to ignore',
-     'Built daily — scan, train, repeat. Today counts.'),
-    ('The guy with real game never runs dry',
-     'Two minutes with Lucien builds him. Start.'),
-    ('You weren\'t born smooth. You train it',
-     'Today is a rep. Don\'t skip the man you\'re building.'),
+     'Protocols keep it open. Log today.'),
+    ('Be the hardest man to overlook',
+     'Built daily — scan, protocol, repeat. Today counts.'),
+    ('The frame under the face',
+     'You\'ve seen the after. Walk toward it today.'),
+    ('You weren\'t born with the jawline',
+     'You build it. Today is a rep. Don\'t skip.'),
     ('Walk in like the room is yours',
      'Because you did the reps they didn\'t. Begin today.'),
     ('Magnetic isn\'t luck',
-     'It\'s looks dialed in and game rehearsed. Both. Today.'),
+     'It\'s skin, jaw, hair and frame — dialed daily. Today.'),
     ('The version she chooses',
      'is the one who showed up every day. Be him today.'),
-    ('Confidence is a trained skill',
+    ('The glow-up is a trained skill',
      'Not a gift. Two minutes today. Compounds for life.'),
   ];
 
   // ── EVENING: streak / loss nudge ────────────────────────────────────
-  // The daily-ritual beat. Loss-framed, identity-anchored. Same proven
-  // state pools as before — picked per horizon day, salted by state +
-  // offset so consecutive days never land the same line.
+  // The daily-ritual beat. Loss-framed, identity-anchored. Picked per
+  // horizon day, salted by state + offset so consecutive days never
+  // land the same line.
 
   static (String, String) _streakCopy(_NudgeState s, int dayOffset) {
     final pool = _streakPool[s] ?? _streakPool[_NudgeState.defaultState]!;
@@ -311,25 +309,21 @@ class DailyNudgeService {
       ('Become impossible to overlook',
        '30-second scan. Personal glow-up plan. Tonight.'),
     ],
-    _NudgeState.postScanNoGame: [
-      ('Looks opened the door',
-       'Game closes it. You\'re halfway. Open Free Flow.'),
+    _NudgeState.postScanNoProtocol: [
       ('You scanned. Now what?',
-       'A face she notices is useless if you freeze when she talks.'),
-      ('She\'d give you 8 seconds',
-       'You\'ve never practiced the line that wins them.'),
+       'The score doesn\'t move by itself. Commit a protocol.'),
+      ('You know the number',
+       'Now commit the plan that moves it. Two minutes.'),
+      ('The report told you the fix',
+       'Committing it is the difference. Jaw, skin, hair — pick one.'),
+      ('Knowing isn\'t changing',
+       'Commit one protocol tonight. 60 days. Different face.'),
+      ('Your weakest axis is waiting',
+       'Commit its protocol before midnight. The clock only starts once.'),
+      ('The plan is sitting there',
+       'Unopened plans don\'t build jawlines. Commit tonight.'),
       ('Halfway',
-       'Free Flow is two minutes. Then you stop being theory.'),
-      ('Tonight she\'ll text someone',
-       'Make sure you know how to text her back.'),
-      ('Practice roleplay until you\'re the smoothest',
-       'Lucien is waiting. Two minutes builds the voice she replays.'),
-      ('Become the guy that always knows what to say',
-       'Open Free Flow. Train the line. Show up sharp tomorrow.'),
-      ('The voice she replays',
-       'Two-minute roleplay tonight. Effortless tomorrow.'),
-      ('From scanned to smooth',
-       'Free Flow turns the face into the man. Tap in.'),
+       'Scanned but not committed. Finish the decision tonight.'),
     ],
     _NudgeState.protocolActive: [
       ('Don\'t break the chain',
@@ -369,41 +363,17 @@ class DailyNudgeService {
       ('The man rooms remember',
        'Is the one who restarted. Log tonight.'),
     ],
-    _NudgeState.gameStale3d: [
-      ('Conversation going foreign',
-       '3 days dry. The line you\'d send tonight is worse than last week\'s.'),
-      ('Your voice rusted',
-       '3 days. Open Free Flow. Even the AI is waiting.'),
-      ('Reps don\'t wait',
-       '3 days off and you\'re already slower. Two-minute rep tonight.'),
-      ('She\'d feel the difference',
-       '3 days off. You\'re going in cold next time. Don\'t.'),
-      ('The muscle softens fast',
-       '3 days. Reload one rep tonight.'),
-      ('Reload the smooth',
-       'Two-minute Free Flow. Tomorrow\'s conversation stays effortless.'),
-      ('Sharpen the line tonight',
-       'One rep with Lucien. Walk into tomorrow ready.'),
-      ('Practice until you\'re unflappable',
-       'Two minutes. The man she chases is built in reps like this.'),
-    ],
-    _NudgeState.gameStale7d: [
-      ('A week of silence',
-       'You used to know what to say. Open Free Flow. Reload.'),
-      ('Right now he\'s better',
-       'A week ago you were even. He kept training. You stopped.'),
-      ('You went quiet',
-       'A week. The next conversation will show it. Train tonight.'),
-      ('She\'d send first',
-       'A week ago you\'d have a line ready. Now you\'d freeze.'),
-      ('Frame fading',
-       'A full week. Two minutes tonight saves what you built.'),
-      ('Get back to the smoothest you',
-       'Two minutes with Lucien. The week off becomes a story.'),
-      ('Train until you\'re the smoothest',
-       'A week\'s rust. One rep clears it. Open Free Flow.'),
-      ('The line that wins her',
-       'You stopped practicing it. Reload tonight.'),
+    _NudgeState.noBodyScan: [
+      ('The face is only half',
+       'Scan the body. See the committed version tonight.'),
+      ('Shred, build or athletic?',
+       'One full-body photo shows you the after. Run it.'),
+      ('Your body has an after',
+       'You haven\'t seen it yet. One scan tonight.'),
+      ('See the frame she\'d notice',
+       'Body scan. One photo. The after will shock you.'),
+      ('The shirt fits different in a year',
+       'See it first. Body scan tonight.'),
     ],
     _NudgeState.dormant7d: [
       ('You went quiet',
@@ -413,75 +383,68 @@ class DailyNudgeService {
       ('Other men didn\'t pause',
        'You did. Open the app before it stops mattering.'),
       ('Where did you go',
-       'The work you started doesn\'t finish on its own.'),
+       'The glow-up you started doesn\'t finish on its own.'),
       ('Come back to the version that owns rooms',
        'Two minutes. Right back where you left off.'),
       ('The guy who owns the room',
-       'Is still inside. Open the app. Two minutes tonight.'),
-      ('Welcome back, future smoothest',
-       'Reload one rep. Tomorrow you\'re sharp again.'),
+       'Is still inside. Open the app. Log tonight.'),
+      ('The streak forgives tonight',
+       'Tomorrow it doesn\'t. Two minutes.'),
     ],
     _NudgeState.dormant14d: [
-      ('Two weeks. He didn\'t pause',
+      ('Two weeks. The mirror noticed',
        'Open the app. Last call to keep what you built.'),
       ('You almost made it',
-       'Then you stopped. Come back. The reps are still here.'),
+       'Then you stopped. Come back. The plan is still here.'),
       ('She moved on',
        'You didn\'t have to. Open the app.'),
       ('Two weeks dark',
        'Whatever stopped you stops here. Reopen. Two minutes.'),
       ('Restart the glow-up',
-       'A scan. A rep. Two minutes. The guy the room remembers, again.'),
-      ('The man she chases',
-       'Is two minutes back. Open the app. Reload.'),
-      ('Come back smoother',
+       'A scan. A log. Two minutes. The guy the room remembers, again.'),
+      ('The man she notices',
+       'Is two minutes back. Open the app.'),
+      ('Come back sharper',
        'Two minutes tonight. Pick up where the streak left you.'),
     ],
     _NudgeState.defaultState: [
-      ('Tonight, reload',
-       'Two minutes of Free Flow keeps the muscle sharp.'),
-      ('Someone just opened your chat',
-       'You should be ready. Open the app.'),
+      ('Tonight, log it',
+       'Two minutes keeps the glow-up compounding.'),
       ('Stay sharp',
-       'Two minutes. Then sleep.'),
+       'Protocol log. Two minutes. Then sleep.'),
       ('Don\'t go cold',
-       'Two-minute rep. Real conversation tomorrow stays effortless.'),
-      ('Become the guy that always knows what to say',
-       'Two minutes with Lucien. Walk in smooth tomorrow.'),
-      ('Practice until you\'re the smoothest',
-       'One rep tonight. The version she replays.'),
-      ('Sharpen the smooth',
-       'Two minutes. Tomorrow\'s conversation owes you nothing.'),
-      ('Build the man she can\'t ignore',
-       'One rep. Every night. The compounding is silent.'),
+       'The mirror keeps score daily. Log tonight.'),
+      ('Skin, jaw, hair, frame',
+       'One of them gets better tonight. Log it.'),
+      ('The jawline doesn\'t build itself',
+       'Two minutes tonight. Lock the day in.'),
+      ('Build the face she can\'t ignore',
+       'One log. Every night. The compounding is silent.'),
     ],
   };
 }
 
 class _Signals {
   final bool hasScan;
-  final bool gameUsed;
+  final bool hasBodyScan;
   final bool hasActiveProtocol;
   final bool hasBrokenProtocol;
-  final int  daysSinceFreeFlow;
   final int  daysSinceOpen;
   const _Signals({
     required this.hasScan,
-    required this.gameUsed,
+    required this.hasBodyScan,
     required this.hasActiveProtocol,
     required this.hasBrokenProtocol,
-    required this.daysSinceFreeFlow,
     required this.daysSinceOpen,
   });
 }
 
 enum _NudgeState {
   noScan,
-  postScanNoGame,
+  postScanNoProtocol,
   protocolActive,
   protocolBroken,
-  gameStale3d,
-  gameStale7d,
+  noBodyScan,
   dormant7d,
   dormant14d,
   defaultState,
