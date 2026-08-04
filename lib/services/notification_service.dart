@@ -475,10 +475,16 @@ class NotificationService {
   /// that calls UNUserNotificationCenter.setBadgeCount(0). Channel
   /// name + handler live in ios/Runner/AppDelegate.swift.
   ///
+  /// v385 — dedicated badge channel. The old share_intake channel this
+  /// piggybacked on was removed with the ImHimShare extension, AND its
+  /// Dart/native names never actually matched (com.imhim vs
+  /// com.mirrorly), so the native badge reset had been silently
+  /// failing. Both sides now agree on this name.
+  ///
   /// On Android the per-icon dot is system-managed and clears
   /// automatically when the user opens / dismisses; no code path
   /// needed there.
-  static const _kBadgeChannel = MethodChannel('com.imhim.app/share_intake');
+  static const _kBadgeChannel = MethodChannel('com.imhim.app/badge');
 
   static Future<void> clearIconBadge() async {
     if (!_initialized) return;
