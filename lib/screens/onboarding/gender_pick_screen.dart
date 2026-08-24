@@ -119,6 +119,9 @@ class GenderPickScreen extends StatelessWidget {
 
                   const Spacer(),
 
+                  // v386 — GAME + RIZZ pillars retired (features cut
+                  // with the looks pivot). The three pillars now match
+                  // what the app actually ships: face, body, 60 days.
                   const _Pillar(
                     eyebrow: 'LOOKS',
                     line: 'We show you exactly\nwhat to fix.',
@@ -126,14 +129,14 @@ class GenderPickScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 30),
                   const _Pillar(
-                    eyebrow: 'GAME',
-                    line: 'Live roleplay until\neverything you say lands.',
+                    eyebrow: 'BODY',
+                    line: 'See the body one\ncommitted year builds.',
                     delayMs: 400,
                   ),
                   const SizedBox(height: 30),
                   const _Pillar(
-                    eyebrow: 'RIZZ',
-                    line: 'Never run out of\nthings to say.',
+                    eyebrow: 'ASCENSION',
+                    line: '60 days of protocols.\nA different man.',
                     delayMs: 580,
                   ),
 

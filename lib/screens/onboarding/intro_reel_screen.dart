@@ -25,7 +25,7 @@ import '../../theme/app_colors.dart';
 ///   LOOKS open the door.
 ///   Yours aren't maxed. Yet.
 ///   ─ beat ─
-///   ImHim Looks gives you both. 🔥❤️
+///   ImHim Looks. Become him.
 ///   [BEGIN]
 class IntroReelScreen extends StatefulWidget {
   /// Route to advance to when the user taps BEGIN or SKIP.
@@ -446,9 +446,11 @@ const _lines = <_Line>[
     bigBreath: true,
   ),
 
-  // 10. The promise + icons + CTA.
+  // 10. The promise + icons + CTA. Brand + the two words the whole
+  // app is named for — same line as the paywall's BECOME HIM button,
+  // so the story ends where the sell begins.
   _Line(
-    ['ImHim Looks', 'maxes', 'them.'],
+    ['ImHim Looks.', 'Become', 'him.'],
     eyebrow: 'SCAN · TRANSFORM · ASCEND',
     size: 44,
     boldIndices: [0],
